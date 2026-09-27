@@ -14,16 +14,19 @@ section,main>*{scroll-margin-top:88px}
 .skip-link:focus{left:0;top:0}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid #8fb5dc;outline-offset:2px;border-radius:6px}
 .explore-tile:focus-visible,.category:focus-visible{outline:3px solid #8fb5dc;outline-offset:2px}
-.container{width:min(1180px,92%);margin:auto}
+.container{width:min(1320px,92%);margin:auto}
 header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .nav{min-height:76px;display:flex;align-items:center;gap:22px}
 .branding{display:flex;align-items:center;gap:12px;min-width:max-content}
 .logo{height:48px;width:auto;object-fit:contain}
-.logo2{height:53px}
 .divider{height:34px;width:1px;background:var(--line)}
 .brandname{font-weight:900;color:var(--navy);font-size:1.18rem;letter-spacing:-.02em}
 .navlinks{display:flex;gap:19px;margin-left:auto;align-items:center}
 .navlinks a{text-decoration:none;color:#45566e;font-size:.93rem;font-weight:650}
+/* A nav item that breaks across two lines makes the header taller than its
+   own min-height and looks broken. Better to hand the space to the hamburger
+   a little earlier, which is what the 1080px breakpoint does. */
+.navlinks a{white-space:nowrap}
 .navlinks a:hover{color:var(--navy)}
 .btn{border:0;border-radius:12px;padding:11px 16px;font-weight:800;transition:.2s}
 .btn-primary{background:var(--navy);color:#fff;box-shadow:0 8px 22px rgba(9,38,74,.18)}
@@ -31,6 +34,8 @@ header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.95);backdro
 .btn-gold{background:var(--gold);color:#10243d}
 .btn-light{background:#eef3f8;color:var(--navy)}
 .btn-outline{background:#fff;border:1px solid var(--line);color:var(--navy)}
+.btn:disabled{opacity:.42;cursor:not-allowed;box-shadow:none}
+.btn:disabled:hover{transform:none}
 .menu{display:none;margin-left:auto;font-size:1.4rem;background:none;border:0;color:var(--navy)}
 
 .hero{padding:76px 0 55px;background:
@@ -43,19 +48,6 @@ h1{font-size:clamp(2.4rem,5vw,4.7rem);line-height:1.02;letter-spacing:-.055em;ma
 .hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin:26px 0}
 .trust{display:flex;gap:18px;flex-wrap:wrap;color:#52647c;font-size:.88rem;font-weight:650}
 .trust span{display:flex;align-items:center;gap:6px}
-.dashboard{background:#fff;border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);padding:22px;position:relative}
-.dash-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-.dash-title{font-weight:900;color:var(--navy)}
-.live{font-size:.72rem;background:#e9f8f0;color:var(--green);padding:5px 8px;border-radius:999px;font-weight:900}
-.profile-card{padding:16px;border:1px solid var(--line);border-radius:17px;background:#fbfdff}
-.profile-top{display:flex;justify-content:space-between;gap:10px}
-.avatar{width:42px;height:42px;border-radius:12px;background:#e7eef7;display:grid;place-items:center;font-weight:900;color:var(--navy)}
-.score{font-weight:900;color:var(--green)}
-.progress{height:8px;background:#edf1f5;border-radius:99px;overflow:hidden;margin:13px 0}
-.progress i{display:block;height:100%;width:92%;background:linear-gradient(90deg,var(--green),#54b879)}
-.mini-list{display:grid;gap:10px;margin-top:14px}
-.mini{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:12px}
-.mini strong{font-size:.88rem}.mini small{color:var(--muted)}
 
 section{padding:70px 0}
 .section-head{text-align:center;max-width:760px;margin:0 auto 34px}
@@ -71,12 +63,23 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .category-icon{font-size:1.55rem}.category strong{display:block;margin-top:9px}.category span{font-size:.82rem;color:var(--muted)}
 
 .find{background:#09264a;color:#fff}
-.find .section-head p{color:#c5d2e1}.find .eyebrow{color:#e7c55e}
+.find .section-head p{color:#c5d2e1}
 .find-box{background:#fff;color:var(--ink);border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
 .field label{display:block;font-weight:800;font-size:.88rem;margin-bottom:7px}
 .field input,.field select{width:100%;border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink);outline:none}
 .field input:focus,.field select:focus{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
+/* The sector field opens and closes like the State / UT select, so it borrows
+   the exact same box and then drops a caret on the right. */
+.select-like{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;
+  border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink)}
+.select-like:hover{border-color:#8ba8c5}
+.select-like.open{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
+.select-like.has-value{font-weight:750}
+.select-caret{flex:none;color:var(--muted);font-size:.8rem;transition:transform .15s}
+.select-like.open .select-caret{transform:rotate(180deg)}
+.sector-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
+.sector-panel[hidden]{display:none}
 .full{grid-column:1/-1}.chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#f7f9fc;border-radius:999px;padding:8px 12px;font-size:.82rem;font-weight:750}
 .chip.active{background:#e8f2ff;border-color:#8fb5dc;color:var(--navy)}
@@ -84,6 +87,13 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 
 .results-toolbar{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:18px;flex-wrap:wrap}
 .results{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+/* Orphan notice: a saved id that is no longer in the dataset. It sits above the
+   grid inside the saved-mode banner, so it needs no grid placement. */
+.stale-note{margin-top:10px;background:#fdf3e0;border:1px solid #f0dcae;border-left:3px solid var(--amber);
+  border-radius:12px;padding:13px 15px;font-size:.82rem;color:#6b5320;line-height:1.6}
+.stale-chip{background:#fff;border:1px solid #e6c98a;border-radius:999px;padding:4px 10px;margin:6px 5px 0 0;
+  font-size:.75rem;font-weight:750;color:#6b5320;cursor:pointer;font-family:inherit}
+.stale-chip:hover{background:#fff8e8}
 .scheme-card{position:relative}
 .match{position:absolute;right:18px;top:18px;background:#e9f8f0;color:var(--green);font-size:.75rem;font-weight:900;padding:6px 9px;border-radius:999px}
 .scheme-card h3{margin:5px 80px 6px 0;font-size:1.05rem}
@@ -91,11 +101,63 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .tags{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
 .tag{font-size:.72rem;padding:5px 8px;border-radius:8px;background:#eef3f8;color:#3f5570;font-weight:800}
 .reason{background:#f7fafc;border-radius:12px;padding:11px;font-size:.82rem;color:#53657c}
+/* A scheme you cannot reach right now: dimmed, and carrying a plain notice.
+   Kept visible on purpose — hiding it would be worse than flagging it. */
+.scheme-card.blocked{background:#fffdfa}
+.scheme-card.blocked h3{color:var(--muted)}
+.blocker{background:#fdf1ef;border:1px solid #f3d3cc;border-radius:12px;padding:11px;font-size:.82rem;color:#8a3b2c;margin-bottom:10px}
+.blocker strong{color:#7a3225}
 .card-actions{display:flex;gap:8px;margin-top:15px}.card-actions .btn{flex:1;padding:9px 10px;font-size:.8rem}
 .empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:35px}
 
-.compare{overflow:auto}.compare table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.compare th,.compare td{padding:14px;border-bottom:1px solid var(--line);text-align:left}.compare th{background:#f3f7fb;color:var(--navy)}
+/* Picking schemes to compare, on the shortlist cards. A real <input>, not a
+   div, so it is keyboard- and screen-reader-operable. The ticked and
+   disabled-look states are set from JS via a class rather than a parent
+   selector, so the styling does not depend on newer selector support. */
+.scheme-card.selected{border-color:var(--navy);box-shadow:0 0 0 2px rgba(16,36,61,.16),var(--shadow)}
+.pick{display:inline-flex;align-items:center;gap:7px;margin:0 0 10px;padding:5px 11px 5px 8px;
+  border:1px solid var(--line);border-radius:999px;background:#f7fafc;cursor:pointer;
+  font-size:.74rem;font-weight:800;color:var(--navy)}
+.pick:hover{background:#eef3f8}
+.pick input{width:15px;height:15px;margin:0;accent-color:var(--navy);cursor:pointer}
+.pick.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pick.on:hover{background:#0d2c50}
+/* A full list must not look tickable, and the label says why, so a greyed-out
+   checkbox is explained rather than just inert. */
+.pick.full{cursor:not-allowed;opacity:.55;background:#f4f6f8}
+.pick.full:hover{background:#f4f6f8}
+
+/* ---------- compare page (compare.html, its own tab) ---------- */
+/* Its own scroll container, so `position:sticky` on the header row sticks to
+   the top of the table instead of the top of the viewport — where it would
+   slide underneath this site's sticky header and be hidden by it. It also
+   keeps the scheme names in view while you read across the rows. */
+.compare{max-height:calc(100vh - 250px);overflow:auto}
+.compare table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.compare th,.compare td{padding:14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;font-size:.86rem;line-height:1.6}
+.compare thead th{background:#f3f7fb;color:var(--navy);position:sticky;top:0;z-index:2}
+/* Row headers are the feature names, so they must not be bolded like the scheme
+   names across the top — that would read as if they were data. */
+.compare tbody th[scope="row"]{background:#fbfcfe;color:var(--navy);font-weight:800;width:190px;min-width:150px}
+/* min-width keeps a column wide enough to read; max-width stops the untruncated
+   prose from stretching one column to several thousand pixels and pushing the
+   other schemes off the screen. Without both, the table grows to whatever the
+   longest eligibility paragraph happens to be. */
+.compare td{min-width:230px;max-width:360px;overflow-wrap:anywhere}
+/* "Highlight differences" hides the rows where every scheme agrees, and
+   keeps the differing ones tinted so the eye goes to what actually varies. */
+.compare tr.differs td{background:#fffdf7}
+.compare tr.same[hidden]{display:none}
+/* This page's content sits in <main>, not a <section>, so the section padding
+   never applied and the table was flush against the header and the footer. */
+.compare-page main{padding:40px 0 60px}
+.compare-page h1{margin:4px 0 8px;font-size:1.7rem}
+.compare-tools{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+/* No .navlinks on this page, so the back link would otherwise sit right beside
+   the logo instead of at the far end of the bar. */
+.compare-page .nav>.btn{margin-left:auto}
+.compare-page .stale-note{margin-bottom:16px}
+.brandlink{display:flex;align-items:center;gap:12px;text-decoration:none}
 
 .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .feature .icon{font-size:1.5rem;margin-bottom:12px}
@@ -117,16 +179,30 @@ footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
 .checklist{padding-left:20px}.checklist li{margin:7px 0}
 .toast{position:fixed;right:20px;bottom:20px;background:#09264a;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:var(--shadow);display:none;z-index:200}.toast.show{display:block}
 
-@media(max-width:1000px){
- .navlinks{display:none}.menu{display:block}.categories{grid-template-columns:repeat(2,1fr)}.results{grid-template-columns:repeat(2,1fr)}
+/* The nav hands over to the hamburger at 1080px, not 1000px. Six links plus a
+   call-to-action need roughly 880px, and the container is 92% of the viewport —
+   at 1000px that left under 50px of slack, so a slightly wider system font made
+   the links wrap and the header grow. The grid changes live in their own
+   queries below so raising this one does not also change the column count. */
+@media(max-width:1080px){
+ .navlinks{display:none}.menu{display:block}
+}
+@media(max-width:1080px){
+ .categories{grid-template-columns:repeat(2,1fr)}
+ .results{grid-template-columns:repeat(2,1fr)}
+}
+/* A wide desktop should show more schemes at once rather than the same three
+   wider ones. Placed after the base rule so it wins on ties. */
+@media(min-width:1440px){
+ .results{grid-template-columns:repeat(4,1fr)}
 }
 @media(max-width:700px){
- .nav{min-height:68px}.logo{height:39px}.logo2{height:44px}.divider,.brandname{display:none}
+ .nav{min-height:68px}.logo{height:39px}.divider,.brandname{display:none}
  .hero{padding:52px 0 40px}.hero-actions .btn{width:100%}.steps,.feature-grid,.results{grid-template-columns:1fr}
  .form-grid{grid-template-columns:1fr}.full{grid-column:auto}.categories{grid-template-columns:1fr 1fr}
  .footer-grid{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}
 }
-@media(max-width:420px){.branding{gap:7px}.logo{height:34px}.logo2{height:39px}.categories{grid-template-columns:1fr}}
+@media(max-width:420px){.branding{gap:7px}.logo{height:34px}.categories{grid-template-columns:1fr}}
 
 /* ===== Dataset-driven scheme finder additions ===== */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
@@ -151,13 +227,13 @@ footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
 .filters-panel.collapsed .filter-body{display:none}
 .filters-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
 .filters-head strong{color:var(--navy)}
-.filter-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.filter-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.filter-row.two{grid-template-columns:repeat(2,1fr)}
 .filter-field label{display:block;font-size:.72rem;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
 .filter-field select{width:100%;border:1px solid var(--line);padding:10px 11px;border-radius:10px;background:#fbfdff;font-size:.83rem}
-.chip.small{padding:6px 11px;font-size:.75rem}
 .chip-scroll{display:flex;flex-wrap:wrap;gap:7px;max-height:112px;overflow:auto;padding:2px}
-.filter-block{margin-top:14px}
-.filter-block>label{display:block;font-size:.72rem;font-weight:800;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
+#sectorChips{max-height:136px}
+.filter-note{margin:14px 0 0}
 .info-banner{background:#eef4fb;border:1px solid #d9e5f3;border-radius:12px;padding:12px 16px;font-size:.82rem;color:#375073;margin-bottom:16px}
 .badge-status{font-size:.64rem;padding:4px 9px;border-radius:999px;font-weight:900;display:inline-block}
 .badge-active{background:#e9f8f0;color:var(--green)}
@@ -165,24 +241,55 @@ footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
 .short-name{font-size:.75rem;color:var(--muted);font-weight:700;margin:-3px 0 6px}
 .scheme-desc{color:#4d5f77;font-size:.83rem;margin:8px 0}
 .elig-block{background:#f7fafc;border-radius:10px;padding:9px 11px;font-size:.78rem;color:#53657c;margin:6px 0}
-.pagination-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:26px}
-.compare-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;background:var(--navy);color:#fff;padding:12px 18px;border-radius:999px;display:none;align-items:center;gap:14px;box-shadow:var(--shadow);z-index:150;font-size:.85rem;font-weight:700}
+/* Results are paged: Previous / page label / Next in one row. */
+.pagination-wrap{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 14px;margin-top:26px}
+.pagination-wrap .dash-mini{text-align:center}
+@media(max-width:520px){
+ .pagination-wrap{width:100%}
+ #prevPageBtn,#nextPageBtn{flex:1 1 auto}
+}
+/* Centred with left:50% + translateX, so anything wider than the viewport is
+   clipped off *both* sides and the controls become unreachable. The cap and
+   the wrap prevent that; the square-ish radius is what makes the wrapped
+   state look deliberate rather than a squashed pill. */
+.compare-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;max-width:min(720px,94vw);
+  background:var(--navy);color:#fff;padding:12px 18px;border-radius:22px;display:none;align-items:center;
+  justify-content:center;flex-wrap:wrap;gap:12px 14px;box-shadow:var(--shadow);z-index:150;font-size:.85rem;font-weight:700}
 .compare-bar.show{display:flex}
-.compare-bar button{border:0;border-radius:999px;padding:8px 14px;font-weight:800;font-size:.8rem;cursor:pointer}
+/* The compare link is an <a>, not a <button>. Targeting only `button` left it
+   with the default .btn rectangle sitting next to a pill-shaped Clear button. */
+.compare-bar button,.compare-bar a{border:0;border-radius:999px;padding:8px 14px;font-weight:800;font-size:.8rem;cursor:pointer;text-decoration:none;display:inline-block}
 .clear-quick{background:#fdeeee;color:var(--red);border:1px solid #f3d0d0;border-radius:999px;padding:6px 12px;font-size:.78rem;font-weight:800;cursor:pointer}
 .modal .sec-title{color:var(--navy);font-size:.98rem;margin:18px 0 8px}
 .modal .subtle{color:var(--muted);font-size:.85rem}
 .na{color:#98a6b8;font-style:italic}
 .ref-tag{font-size:.68rem;font-weight:700;color:#98a6b8;text-transform:none;letter-spacing:0}
-@media(max-width:1000px){
+.chip-filter{width:100%;border:1px solid var(--line);padding:9px 11px;border-radius:10px;margin:2px 0 6px;font-size:.83rem;background:#fff;color:var(--ink);outline:none}
+.chip-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:2px 0 4px}
+.chip-more{background:none;border:none;padding:3px 2px;font-size:.75rem;font-weight:800;color:var(--navy2);cursor:pointer;text-decoration:underline;text-underline-offset:3px;border-radius:6px}
+.chip-more:hover{color:var(--navy)}
+.chip-more[hidden]{display:none}
+.chip-filter:focus{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
+.field-hint{display:block;margin-top:6px;font-size:.73rem;font-weight:650;color:var(--muted)}
+.field-hint.ok{color:var(--green)}
+.field-hint.warn{color:var(--amber)}
+.ref-note{margin:18px 0 0;font-size:.78rem;line-height:1.5;color:#7b8ba1;background:#f7fafc;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:11px 13px}
+.ref-note strong{color:#4d5f77}
+.info-banner .dash-mini{display:block;margin-top:4px}
+/* Tall enough for the bar to wrap onto a second line in a short window —
+   at 78px a wrapped bar covered the last row of results. */
+body.has-compare-bar{padding-bottom:104px}
+.chip[hidden]{display:none}
+@media(max-width:1080px){
  .stats-grid{grid-template-columns:repeat(2,1fr)}.explore-grid{grid-template-columns:repeat(2,1fr)}
  .filter-row{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:700px){
  .stats-grid{grid-template-columns:1fr 1fr}.explore-grid{grid-template-columns:1fr 1fr}
- .filter-row{grid-template-columns:1fr}
+ .filter-row,.filter-row.two{grid-template-columns:1fr}
 }
 
 
-.hero-grid.two-col{grid-template-columns:1.2fr .9fr;gap:40px}
-@media(max-width:1000px){.hero-grid.two-col{grid-template-columns:1fr;gap:22px}}
+/* Hero is single-column since the dataset-snapshot card was removed. The copy
+   block is width-capped so the large h1 does not stretch across the container. */
+.hero-copy{max-width:840px}
