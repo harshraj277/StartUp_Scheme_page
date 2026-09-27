@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Yojana Setu — find government startup schemes matched to your startup profile.">
+<meta name="theme-color" content="#09264a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%2309264a'/%3E%3Ctext x='50' y='68' font-size='58' font-family='Arial,sans-serif' font-weight='900' fill='%23d8a52c' text-anchor='middle'%3EY%3C/text%3E%3C/svg%3E">
+<title>Yojana Setu — Government Startup Scheme Finder</title>
+
+<link rel="stylesheet" href="css/styles.css">
+
+</head>
+<body>
+<a class="skip-link" href="#home">Skip to main content</a>
+<header>
+  <div class="container nav">
+    <div class="branding">
+      <img class="logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2309264a'/%3E%3Cpath d='M32 30 L50 52 L68 30 M50 52 L50 76' fill='none' stroke='%23d8a52c' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="Yojana Setu">
+      <img class="logo logo2" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2309264a'/%3E%3Cpath d='M32 30 L50 52 L68 30 M50 52 L50 76' fill='none' stroke='%23d8a52c' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="Yojana Setu">
+      <div class="divider"></div>
+      <div class="brandname">Yojana Setu</div>
+    </div>
+    <nav class="navlinks" id="navLinks" aria-label="Primary">
+      <a href="#home">Home</a><a href="#find">Find Schemes</a><a href="#schemes" onclick="resetToBrowse()">Browse Schemes</a>
+      <a href="#categories">Categories</a><a href="#about">About</a>
+      <button class="btn btn-primary" onclick="scrollToFind()">Find My Schemes →</button>
+    </nav>
+    <button class="menu" id="menuBtn" onclick="toggleMobileNav()" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">☰</button>
+  </div>
+</header>
+
+<main id="home">
+<section class="hero">
+  <div class="container hero-grid two-col">
+    <div>
+      <span class="badge" id="heroBadge">🇮🇳 Central Government Startup Schemes</span>
+      <h1>Find Government Schemes Made for Your Startup.</h1>
+      <p>Search, filter and match a live dataset of Central Government startup schemes — grants, credit guarantees, incubation support, R&D funding and more — against your startup's profile.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="scrollToFind()">Find My Schemes →</button>
+        <button class="btn btn-light" onclick="resetToBrowse();scrollToId('schemes')">Browse All Schemes</button>
+      </div>
+      <div class="trust">
+        <span>✓ <span id="trustCount">—</span> schemes in dataset</span>
+        <span>✓ <span id="trustMinistries">—</span> ministries &amp; agencies</span>
+        <span>✓ Official-source links on every record</span>
+      </div>
+    </div>
+    <div class="dashboard">
+      <div class="dash-head"><div class="dash-title">Dataset snapshot</div><span class="live">Live</span></div>
+      <div class="profile-card">
+        <div class="profile-top"><div class="avatar">📊</div><div><strong>Startup India dataset</strong><div class="dash-mini">Central Government · last verified <span id="dashVerified">—</span></div></div></div>
+        <div class="mini-list" id="heroMiniList"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stats">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Dashboard</div><h2>Government scheme statistics</h2><p>Calculated live from the imported dataset — updates automatically if the dataset changes.</p></div>
+    <div class="stats-grid" id="statsGrid"></div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">How it works</div><h2>From startup profile to relevant schemes.</h2><p>Yojana Setu turns a complicated scheme search into a simple three-step journey.</p></div>
+    <div class="steps">
+      <div class="step"><div class="step-num">01</div><h3>Tell us about your startup</h3><p>Select your stage, sector, business type and recognition status.</p></div>
+      <div class="step"><div class="step-num">02</div><h3>Match eligibility</h3><p>We compare your profile against structured scheme data and calculate a transparent match score.</p></div>
+      <div class="step"><div class="step-num">03</div><h3>Explore opportunities</h3><p>Review why a scheme matched, compare options, save schemes and open the official application source.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="categories">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Explore</div><h2>Explore government schemes</h2><p>Jump straight into an area that matters to your startup. Counts are calculated live from the dataset.</p></div>
+    <div class="explore-grid" id="exploreGrid"></div>
+  </div>
+</section>
+
+<section class="find" id="find">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Eligibility engine</div><h2>Find schemes for my startup</h2><p>Enter a few details. This is an eligibility <strong>guidance and matching tool</strong> — it does not confirm official eligibility. Final eligibility is always determined by the concerned government authority.</p></div>
+    <div class="find-box">
+      <div class="form-grid">
+        <div class="field"><label for="startupName">Startup / Business Name</label><input id="startupName" placeholder="e.g. GreenTech Labs"></div>
+        <div class="field"><label for="state">State / UT <span class="ref-tag">(reference only — dataset is Central-govt, applies nationwide)</span></label><select id="state"><option value="">Select state</option><option>Maharashtra</option><option>Karnataka</option><option>Gujarat</option><option>Delhi</option><option>Tamil Nadu</option><option>Telangana</option><option>Uttar Pradesh</option><option>West Bengal</option><option>Rajasthan</option><option>All India</option></select></div>
+        <div class="field"><label for="stage">Business Stage</label><input id="stage" list="stageList" placeholder="e.g. Idea, Early Stage" autocomplete="off"><datalist id="stageList"></datalist></div>
+        <div class="field"><label for="business">Business / Beneficiary Type</label><input id="business" list="businessList" placeholder="e.g. DPIIT-recognised startups, MSME" autocomplete="off"><datalist id="businessList"></datalist></div>
+        <div class="field full"><label id="sectorChipsLabel">Industry / Sector <span class="ref-tag">(select one or more)</span></label><div class="chips" id="sectorChips" role="group" aria-labelledby="sectorChipsLabel"></div></div>
+        <div class="field"><label for="recognition">DPIIT / Udyam Recognition</label><select id="recognition"><option value="">Not sure / none yet</option><option value="DPIIT">DPIIT-recognised startup</option><option value="MSME">Udyam / MSME registered</option><option value="Both">Both DPIIT &amp; Udyam</option></select></div>
+        <div class="field"><label for="turnover">Annual Turnover <span class="ref-tag">(reference only)</span></label><select id="turnover"><option value="">Select range</option><option>Below ₹10 lakh</option><option>₹10 lakh–₹50 lakh</option><option>₹50 lakh–₹1 crore</option><option>₹1 crore+</option></select></div>
+        <div class="field"><label for="funding">Funding Required <span class="ref-tag">(reference only)</span></label><select id="funding"><option value="">Select range</option><option>₹0–₹5 lakh</option><option>₹5–₹25 lakh</option><option>₹25 lakh–₹1 crore</option><option>₹1 crore+</option><option>Not a direct grant / equity or credit</option></select></div>
+        <div class="field"><label for="age">Age Group <span class="ref-tag">(reference only)</span></label><select id="age"><option value="">Select</option><option>Under 18</option><option>18–25</option><option>26–35</option><option>36–45</option><option>46+</option></select></div>
+        <div class="field"><label for="gender">Gender <span class="ref-tag">(reference only)</span></label><select id="gender"><option value="">Select</option><option>Woman</option><option>Man</option><option>Other / prefer not to say</option></select></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-light" onclick="resetForm()">Reset</button><button class="btn btn-gold" onclick="findSchemes()">Find Matching Schemes →</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="schemes">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Scheme directory</div><h2 id="resultsHeading">Browse all schemes</h2><p>Every record links to its official government source. Verify current eligibility and application details there before applying.</p></div>
+
+    <div id="quickFilterBanner"></div>
+
+    <div class="toolbar" id="browseToolbar">
+      <div class="searchbar"><label for="searchInput" style="display:none">Search schemes</label>🔎 <input id="searchInput" placeholder="Search by scheme name, ministry, sector, benefit, keyword…" oninput="onSearchInput()" aria-label="Search by scheme name, ministry, sector, benefit, keyword"></div>
+      <button class="btn btn-outline" onclick="toggleFilters()" id="filtersToggleBtn" aria-expanded="false" aria-controls="filtersPanel">⚙ Filters</button>
+      <label for="sort" style="display:none">Sort results</label>
+      <select id="sort" class="btn btn-outline" onchange="renderResults()" style="padding:11px 14px">
+        <option value="relevance">Best Match</option>
+        <option value="name">Name A–Z</option>
+        <option value="ministry">Ministry A–Z</option>
+        <option value="verified">Recently Verified</option>
+      </select>
+    </div>
+
+    <div class="filters-panel collapsed" id="filtersPanel">
+      <div class="filters-head"><strong>Advanced filters</strong><div style="display:flex;gap:10px"><button class="btn btn-light" style="padding:8px 12px;font-size:.8rem" onclick="clearFilters()">Clear all</button></div></div>
+      <div class="filter-body">
+        <div class="filter-row">
+          <div class="filter-field"><label for="fGovLevel">Government Level</label><select id="fGovLevel" onchange="onFilterChange()"><option value="">All levels</option></select></div>
+          <div class="filter-field"><label for="fMinistry">Ministry / Department</label><select id="fMinistry" onchange="onFilterChange()"><option value="">All ministries</option></select></div>
+          <div class="filter-field"><label for="fType">Scheme Type</label><select id="fType" onchange="onFilterChange()"><option value="">All types</option></select></div>
+          <div class="filter-field"><label for="fStatus">Status</label><select id="fStatus" onchange="onFilterChange()"><option value="">All statuses</option><option value="Active">Active</option><option value="Programme / Call-based">Programme / Call-based</option></select></div>
+        </div>
+        <div class="filter-row" style="margin-top:12px">
+          <div class="filter-field"><label for="fBeneficiary">Beneficiary Type</label><select id="fBeneficiary" onchange="onFilterChange()"><option value="">All beneficiaries</option></select></div>
+          <div class="filter-field"><label for="fFinance">Financial Assistance</label><select id="fFinance" onchange="onFilterChange()"><option value="">All schemes</option><option value="specific">Specific amount mentioned</option><option value="variable">Programme / case-by-case</option></select></div>
+          <div class="filter-field"><label for="fRepay">Repayment</label><select id="fRepay" onchange="onFilterChange()"><option value="">All</option><option value="Non-repayable / Not applicable">Non-repayable / Not applicable</option><option value="Loan-linked (repayable)">Loan-linked (repayable)</option><option value="Equity / Investment-based">Equity / Investment-based</option><option value="Depends on instrument">Depends on instrument</option></select></div>
+          <div class="filter-field"><label for="fMode">Application Mode</label><select id="fMode"><option value="">Not specified for most records</option></select></div>
+        </div>
+        <div class="filter-block"><label id="filterSectorLabel">Industry / Sector</label><div class="chip-scroll" id="filterSectorChips" role="group" aria-labelledby="filterSectorLabel"></div></div>
+        <div class="filter-block"><label id="filterStageLabel">Startup Stage</label><div class="chip-scroll" id="filterStageChips" role="group" aria-labelledby="filterStageLabel"></div></div>
+      </div>
+    </div>
+
+    <div class="results-toolbar">
+      <strong id="resultCount">Loading schemes…</strong>
+    </div>
+    <div id="modeBanner"></div>
+    <div class="results" id="results"></div>
+    <div class="pagination-wrap">
+      <button class="btn btn-outline" id="loadMoreBtn" onclick="loadMore()" style="display:none">Load more schemes</button>
+      <span class="dash-mini" id="pagingInfo"></span>
+    </div>
+    <p class="disclaimer">Schemes are shown as "potentially relevant" based on the information you provide — this is not a guarantee of eligibility, funding or approval. Always verify current rules on the official government source linked on each scheme.</p>
+  </div>
+</section>
+
+<section id="compareSection" style="display:none">
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Compare</div><h2>Compare saved schemes</h2></div>
+    <div class="compare" id="compare"></div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="section-head"><div class="eyebrow">Why Yojana Setu</div><h2>Built to make scheme discovery easier.</h2></div>
+    <div class="feature-grid">
+      <div class="feature"><div class="icon">🎯</div><h3>Personalized matching</h3><p>See a transparent score and the real dataset fields that influenced a recommendation.</p></div>
+      <div class="feature"><div class="icon">🔎</div><h3>Powerful search &amp; filters</h3><p>Search and filter by ministry, sector, stage, benefit type, financial assistance and more.</p></div>
+      <div class="feature"><div class="icon">🔗</div><h3>Official-source focus</h3><p>Every record carries an official source link and a last-verified date — nothing is invented.</p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-brand"><img class="logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2309264a'/%3E%3Cpath d='M32 30 L50 52 L68 30 M50 52 L50 76' fill='none' stroke='%23d8a52c' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="Yojana Setu"><img class="logo logo2" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%2309264a'/%3E%3Cpath d='M32 30 L50 52 L68 30 M50 52 L50 76' fill='none' stroke='%23d8a52c' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" alt="Yojana Setu"></div>
+        <div class="footer-title">Yojana Setu</div>
+        <p>Find the right government scheme for your startup.</p>
+      </div>
+      <div><div class="footer-title">Quick Links</div><div class="footer-links"><a href="#find">Find Schemes</a><a href="#schemes">Browse Schemes</a><a href="#categories">Categories</a><a href="#about">How It Works</a></div></div>
+      <div><div class="footer-title">Important</div><p>Yojana Setu is an independent information and discovery platform. It is not a government website and does not represent any government department.</p></div>
+    </div>
+    <div class="copyright">© 2026 Yojana Setu · Independent scheme discovery platform · Verify eligibility on official government sources.</div>
+  </div>
+</footer>
+
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Scheme details" onclick="event.stopPropagation()">
+    <button class="close" onclick="closeModal()" aria-label="Close details">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+
+<script src="data/schemes.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
