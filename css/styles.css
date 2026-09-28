@@ -1,6 +1,6 @@
 
 :root{
-  --navy:#09264a; --navy2:#123a68; --gold:#d8a52c; --ink:#10243d;
+  --navy:#09264a; --navy2:#123a68; --gold:#d8a52c; --gold-soft:#e9c877; --ink:#10243d;
   --muted:#607089; --bg:#f5f8fc; --card:#fff; --line:#e3eaf3;
   --green:#17834b; --amber:#a86d00; --red:#b33a3a; --shadow:0 18px 50px rgba(9,38,74,.10);
 }
@@ -10,24 +10,53 @@ button,input,select{font:inherit} button{cursor:pointer}
 a{color:inherit}
 section,main>*{scroll-margin-top:88px}
 @media(max-width:700px){section,main>*{scroll-margin-top:76px}}
-.skip-link{position:absolute;left:-999px;top:auto;background:var(--navy);color:#fff;padding:12px 18px;border-radius:0 0 10px 0;z-index:999;font-weight:800;text-decoration:none}
+/* Gold, not navy: the header behind it is navy now, and a navy skip link on a
+   navy header is invisible exactly when it needs to be seen. */
+.skip-link{position:absolute;left:-999px;top:auto;background:var(--gold);color:var(--ink);padding:12px 18px;border-radius:0 0 10px 0;z-index:999;font-weight:800;text-decoration:none}
 .skip-link:focus{left:0;top:0}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid #8fb5dc;outline-offset:2px;border-radius:6px}
 .explore-tile:focus-visible,.category:focus-visible{outline:3px solid #8fb5dc;outline-offset:2px}
-.container{width:min(1320px,92%);margin:auto}
-header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+/* Full width. The old `min(1320px, 92%)` left a 4%-each-side gutter, which on a
+   wide monitor read as two empty margins holding the content in the middle.
+   A small fluid inline padding is enough to keep text off the screen edge;
+   anything that must not stretch gets its own max-width further down. */
+.container{width:100%;padding-inline:clamp(16px,3vw,40px);margin:auto}
+/* Navy bar with a gold rule, matched to the blue and gold in the logo. The
+   background is opaque, so the old backdrop-filter behind it was doing nothing. */
+header{position:sticky;top:0;z-index:50;
+  background:linear-gradient(180deg,var(--navy2) 0%,var(--navy) 100%);
+  border-bottom:2px solid var(--gold);
+  box-shadow:0 2px 16px rgba(9,38,74,.22)}
 .nav{min-height:76px;display:flex;align-items:center;gap:22px}
 .branding{display:flex;align-items:center;gap:12px;min-width:max-content}
-.logo{height:48px;width:auto;object-fit:contain}
-.divider{height:34px;width:1px;background:var(--line)}
-.brandname{font-weight:900;color:var(--navy);font-size:1.18rem;letter-spacing:-.02em}
+/* Both supplied logos are square WebP with no alpha channel, so whatever
+   background they carry shows as a hard-edged square. The rounded corners and
+   the faint gold ring make that read as a deliberate logo tile tied to the
+   gold rule below the bar, whatever colour the artwork itself turns out to be. */
+.logo{height:48px;width:auto;object-fit:contain;border-radius:12px;
+  box-shadow:0 0 0 1px rgba(216,165,44,.34)}
+.divider{height:34px;width:1px;background:rgba(255,255,255,.22)}
+/* Two-line lockup: the site name over its Devanagari name, in the logo's gold. */
+.brandname b{display:block;font-weight:900;color:#fff;font-size:1.16rem;letter-spacing:-.02em;line-height:1.15}
+.brandname small{display:block;font-size:.7rem;font-weight:700;color:var(--gold-soft);line-height:1;margin-top:3px;letter-spacing:.01em}
 .navlinks{display:flex;gap:19px;margin-left:auto;align-items:center}
-.navlinks a{text-decoration:none;color:#45566e;font-size:.93rem;font-weight:650}
+/* A transparent border is always present and only coloured on hover, so
+   underlining a nav item does not shift the row by 2px. */
+.navlinks a{text-decoration:none;color:rgba(255,255,255,.9);font-size:.93rem;font-weight:650;
+  padding:7px 1px;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
 /* A nav item that breaks across two lines makes the header taller than its
    own min-height and looks broken. Better to hand the space to the hamburger
    a little earlier, which is what the 1080px breakpoint does. */
 .navlinks a{white-space:nowrap}
-.navlinks a:hover{color:var(--navy)}
+.navlinks a:hover{color:#fff;border-bottom-color:var(--gold)}
+/* .btn-primary is navy, which on a navy bar is invisible. Inside the nav only,
+   the call-to-action becomes the logo's gold. */
+.navlinks .btn-primary{background:var(--gold);color:var(--ink);box-shadow:none}
+.navlinks .btn-primary:hover{background:#e9bd52;color:var(--ink)}
+/* compare.html's "Back to schemes" is the only .btn-outline inside .nav, so
+   this stays scoped to the bar and leaves the page's other outlines alone. */
+.nav .btn-outline{background:transparent;border-color:rgba(255,255,255,.32);color:#fff}
+.nav .btn-outline:hover{border-color:var(--gold);color:var(--gold)}
 .btn{border:0;border-radius:12px;padding:11px 16px;font-weight:800;transition:.2s}
 .btn-primary{background:var(--navy);color:#fff;box-shadow:0 8px 22px rgba(9,38,74,.18)}
 .btn-primary:hover{transform:translateY(-1px);background:#0e315d}
@@ -36,7 +65,7 @@ header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.95);backdro
 .btn-outline{background:#fff;border:1px solid var(--line);color:var(--navy)}
 .btn:disabled{opacity:.42;cursor:not-allowed;box-shadow:none}
 .btn:disabled:hover{transform:none}
-.menu{display:none;margin-left:auto;font-size:1.4rem;background:none;border:0;color:var(--navy)}
+.menu{display:none;margin-left:auto;font-size:1.4rem;background:none;border:0;color:#fff}
 
 .hero{padding:76px 0 55px;background:
  radial-gradient(circle at 82% 20%,rgba(216,165,44,.16),transparent 25%),
@@ -57,14 +86,16 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 .step,.category,.scheme-card,.feature{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 8px 26px rgba(9,38,74,.045)}
 .step-num{width:42px;height:42px;border-radius:12px;background:#eaf1f8;color:var(--navy);display:grid;place-items:center;font-weight:900;margin-bottom:16px}
-.step h3,.feature h3{margin:0 0 8px}.step p,.feature p{margin:0;color:var(--muted)}
+.step h3,.feature h3{margin:0 0 8px}.step p,.feature p{margin:0;color:var(--muted);max-width:64ch}
 .categories{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .category{cursor:pointer;transition:.2s}.category:hover{transform:translateY(-3px);border-color:#c9d8e9}
 .category-icon{font-size:1.55rem}.category strong{display:block;margin-top:9px}.category span{font-size:.82rem;color:var(--muted)}
 
 .find{background:#09264a;color:#fff}
 .find .section-head p{color:#c5d2e1}
-.find-box{background:#fff;color:var(--ink);border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+/* Capped because the form is two columns of inputs: at full width each field
+   would be ~900px across, which is a worse problem than the gutter was. */
+.find-box{background:#fff;color:var(--ink);border-radius:24px;padding:28px;max-width:1000px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
 .field label{display:block;font-weight:800;font-size:.88rem;margin-bottom:7px}
 .field input,.field select{width:100%;border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink);outline:none}
@@ -157,6 +188,9 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
    the logo instead of at the far end of the bar. */
 .compare-page .nav>.btn{margin-left:auto}
 .compare-page .stale-note{margin-bottom:16px}
+/* Same reason as footer p: full width would otherwise give the closing note a
+   1800px line. The table above it is meant to use the whole width. */
+.compare-page .ref-note{max-width:900px}
 .brandlink{display:flex;align-items:center;gap:12px;text-decoration:none}
 
 .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
@@ -168,7 +202,23 @@ footer{background:#071b35;color:#d9e4f1;padding:42px 0 20px}
 .footer-brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 footer .logo{height:43px}.footer-title{font-weight:900;color:#fff}
 footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
+/* The footer's first column is 1.5fr, so at full width a line of body copy would
+   run to ~880px. Measured in characters, not pixels, so it stays readable at
+   every window size. */
+footer p{max-width:62ch}
 .footer-links{display:grid;gap:8px}.copyright{border-top:1px solid rgba(255,255,255,.1);margin-top:28px;padding-top:17px;font-size:.78rem;color:#8499af}
+/* Copyright on the left, institution in the bottom corner. Two columns until
+   there is no room, then stacked and full width so the name never gets clipped
+   into an unreadable sliver. */
+.footer-bottom{border-top:1px solid rgba(255,255,255,.1);margin-top:28px;padding-top:17px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px 30px;flex-wrap:wrap}
+.footer-bottom .copyright{border:0;margin:0;padding:0;flex:1 1 320px}
+.institution{display:flex;align-items:center;gap:12px;flex:0 1 auto;max-width:100%;
+  margin-left:auto;padding:9px 15px 9px 9px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);border-radius:14px}
+.institution-logo{height:46px;width:46px;flex:none;object-fit:contain;border-radius:10px;background:#fff}
+.institution-label{font-size:.66rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#d8a52c}
+.institution-name{font-size:.82rem;font-weight:700;color:#e6eef7;line-height:1.35;max-width:34ch}
 
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(3,15,30,.62);z-index:100;padding:25px;overflow:auto}
 .modal-backdrop.show{display:grid;place-items:center}
@@ -186,6 +236,18 @@ footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
    queries below so raising this one does not also change the column count. */
 @media(max-width:1080px){
  .navlinks{display:none}.menu{display:block}
+ /* The open panel. Kept navy rather than white so the white nav-link colour
+    above stays correct in both states, and full-bleed rather than inset so it
+    cannot leave a gap at the edges at any width. */
+ /* No border-top here: the bar's own 2px gold rule already caps this panel, and
+    a second one directly below it would read as a 4px edge. */
+ .navlinks.mobile-open{display:flex;position:absolute;top:100%;left:0;right:0;
+   flex-direction:column;align-items:stretch;gap:2px;padding:12px 16px 16px;
+   background:var(--navy2);
+   box-shadow:0 18px 40px rgba(9,38,74,.35);z-index:60}
+ .navlinks.mobile-open a{padding:11px 12px;border-bottom:0;border-radius:10px}
+ .navlinks.mobile-open a:hover{background:rgba(255,255,255,.09);color:#fff}
+ .navlinks.mobile-open .btn-primary{margin-top:8px;padding:12px;text-align:center}
 }
 @media(max-width:1080px){
  .categories{grid-template-columns:repeat(2,1fr)}
@@ -196,13 +258,22 @@ footer p,footer a{color:#9eb0c4;font-size:.88rem;text-decoration:none}
 @media(min-width:1440px){
  .results{grid-template-columns:repeat(4,1fr)}
 }
+/* With the gutter gone, four columns on a 27" monitor means ~600px cards. A
+   fifth keeps a card near the width it is designed at and shows more schemes at
+   once, which is what the extra space is actually for. */
+@media(min-width:1800px){
+ .results{grid-template-columns:repeat(5,1fr)}
+}
 @media(max-width:700px){
- .nav{min-height:68px}.logo{height:39px}.divider,.brandname{display:none}
+ .nav{min-height:68px}.logo{height:39px}.divider{display:none}
+ /* The nav is just a hamburger at this width, so there is room for the name.
+    The Devanagari line goes, being a second line under a 39px logo. */
+ .brandname small{display:none}
  .hero{padding:52px 0 40px}.hero-actions .btn{width:100%}.steps,.feature-grid,.results{grid-template-columns:1fr}
  .form-grid{grid-template-columns:1fr}.full{grid-column:auto}.categories{grid-template-columns:1fr 1fr}
  .footer-grid{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}
+ .institution{margin-left:0;width:100%}.institution-name{max-width:none}
 }
-@media(max-width:420px){.branding{gap:7px}.logo{height:34px}.categories{grid-template-columns:1fr}}
 
 /* ===== Dataset-driven scheme finder additions ===== */
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
@@ -290,6 +361,7 @@ body.has-compare-bar{padding-bottom:104px}
 }
 
 
-/* Hero is single-column since the dataset-snapshot card was removed. The copy
-   block is width-capped so the large h1 does not stretch across the container. */
+/* The h1 is up to 4.7rem, so the copy is width-capped rather than stretched
+   across the container — a line of headline text six words longer than anyone
+   reads. */
 .hero-copy{max-width:840px}

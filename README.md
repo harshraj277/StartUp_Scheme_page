@@ -56,18 +56,24 @@ or `node tests/run-tests.js`. Four suites, no dependencies:
 Overflow and fixed widths are what actually makes a page "not fit", so the ones
 that bit are pinned down by contract tests:
 
-- The container is `min(1320px, 92%)`. Above that it stops growing, because a
-  comparison table or a 4-up card grid stops being readable when it does.
-- The nav hands over to the hamburger at **1080px**, not 1000px. Six links plus
-  the call-to-action need roughly 880px and the container is 92% of the
-  viewport, so at 1000px there was under 50px of slack — a slightly wider system
-  font made the labels wrap and the header grow taller than its own
-  `min-height`. `.navlinks a` is now `white-space:nowrap`, so a label cannot
-  break in two.
+- The container is **full width** with a small fluid gutter,
+  `width:100%;padding-inline:clamp(16px,3vw,40px)`. It used to be
+  `min(1320px, 92%)`, which on a wide monitor held the content in the middle
+  with two empty margins either side. Because nothing now caps the width,
+  anything that must not stretch carries its own cap instead — the hero copy
+  (840px), each section heading (760px), the match form (1000px), footer
+  paragraphs (`62ch`) and the step/feature copy (`64ch`). The card grids and
+  the compare table deliberately have no cap; that is what should use the room.
+- The nav hands over to the hamburger at **1080px**. Six links plus the
+  call-to-action need roughly 880px, so at 1000px there was under 50px of slack —
+  a slightly wider system font made the labels wrap and the header grow taller
+  than its own `min-height`. `.navlinks a` is now `white-space:nowrap`, so a label
+  cannot break in two.
 - The nav breakpoint is its own media query. It used to carry the result-column
   counts with it, so fixing the nav would have silently halved the results grid.
-- The results grid is 4-up at ≥1440px, 3-up at 1081–1439px, 2-up at 761–1080px,
-  1-up below.
+- The results grid is 5-up at ≥1800px, 4-up at 1440–1799px, 3-up at
+  1081–1439px, 2-up at 761–1080px, 1-up below. Four columns across a 27" screen
+  left ~600px cards, so the extra width buys a fifth column instead.
 - The compare table caps columns at `max-width:360px` with `overflow-wrap`. The
   cell text is deliberately untruncated, so without a cap one long eligibility
   paragraph stretches its column to several thousand pixels and pushes the other

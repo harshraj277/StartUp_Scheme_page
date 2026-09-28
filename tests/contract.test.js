@@ -323,17 +323,48 @@ t.check("the compare link inside that bar is styled like the buttons beside it",
   /\.compare-bar button,\.compare-bar a\{/.test(css));
 t.check("the page is tall enough to clear the bar when it wraps",
   /body\.has-compare-bar\{padding-bottom:1\d\dpx\}/.test(css));
-t.check("the container is wide enough to use a large monitor, and the nav cannot wrap its labels",
-  /\.container\{width:min\(1[23]\d\dpx,92%\)/.test(css) && /\.navlinks a\{white-space:nowrap\}/.test(css));
+/* The container is deliberately full width now — the 92% gutter was removed on
+   request. What still matters is that text which must not stretch has its own
+   cap, or a line of copy would run the full width of a 27" monitor. */
+t.check("the container runs full width, with only a small fluid gutter",
+  /\.container\{width:100%;padding-inline:clamp\(16px,3vw,40px\)/.test(css) &&
+  !/\.container\{[^}]*92%/.test(css));
+t.check("the nav cannot wrap its labels",
+  /\.navlinks a\{white-space:nowrap\}/.test(css));
+t.check("prose that would stretch is capped instead of running the full width",
+  /\.hero-copy\{max-width:840px\}/.test(css) &&
+  /\.section-head\{[^}]*max-width:760px/.test(css) &&
+  /\.find-box\{[^}]*max-width:1000px/.test(css) &&
+  /footer p\{max-width:62ch\}/.test(css) &&
+  /\.compare-page \.ref-note\{max-width:900px\}/.test(css) &&
+  /\.institution-name\{[^}]*max-width:34ch/.test(css));
+t.check("the gutter never collapses to zero, so text still clears the screen edge",
+  /padding-inline:clamp\(16px,/.test(css));
+/* Grids are the thing that should actually get the extra width. */
+t.check("the card grids have no max-width, so they use the full width",
+  /\.results\{display:grid/.test(css) && !/\.results\{[^}]*max-width/.test(css) &&
+  /\.compare\{/.test(css) && !/\.compare\{[^}]*max-width/.test(css));
 t.check("the nav hands over to the hamburger before the links run out of room",
-  /@media\(max-width:1080px\)\{\s*\.navlinks\{display:none\}/.test(css) && !/max-width:1000px/.test(css));
+  /@media\(max-width:1080px\)\{\s*\.navlinks\{display:none\}/.test(css) &&
+  /* Scoped to media queries. A bare `max-width:1000px` ban also forbade an
+     ordinary declaration of that length, which is what the find-box cap is. */
+  !/@media\([^)]*max-width:1000px/.test(css));
 /* The nav breakpoint used to carry the column counts with it, so raising it to
-   fix the nav silently halved the results grid. They are separate queries now. */
+   fix the nav silently halved the results grid. They are separate queries now,
+   and this query is allowed to hold the mobile panel's own rules. */
 t.check("the nav breakpoint and the grid breakpoints are separate queries",
-  /@media\(max-width:1080px\)\{\s*\.navlinks\{display:none\}\.menu\{display:block\}\s*\}/.test(css));
+  /@media\(max-width:1080px\)\{\s*\.navlinks\{display:none\}\.menu\{display:block\}/.test(css) &&
+  /@media\(max-width:1080px\)\{\s*\.categories\{grid-template-columns:repeat\(2,1fr\)\}/.test(css));
 t.check("a wide desktop shows 4 results, and the rule comes after the base one",
   /@media\(min-width:1440px\)\{\s*\.results\{grid-template-columns:repeat\(4,1fr\)\}/.test(css) &&
   css.indexOf("min-width:1440px") > css.indexOf(".results{display:grid"));
+/* The container lost its max-width, so on a big monitor four columns meant 600px
+   cards. The extra width has to buy a column, or it is just wide cards. */
+t.check("an extra-wide monitor gets a 5th column, ordered after the 4th",
+  /@media\(min-width:1800px\)\{\s*\.results\{grid-template-columns:repeat\(5,1fr\)\}/.test(css) &&
+  css.indexOf("min-width:1800px") > css.indexOf("min-width:1440px"));
+t.check("wide cards still hold readable lines of copy",
+  /\.step p,\.feature p\{[^}]*max-width:64ch/.test(css));
 t.check("the 2-column rule lands before the 1-column one, or small screens get 2 columns",
   css.indexOf(".results{grid-template-columns:repeat(2,1fr)}") <
   css.indexOf(".steps,.feature-grid,.results{grid-template-columns:1fr}"));
@@ -341,6 +372,65 @@ t.check("the back link on the compare page sits at the far end of the header",
   /\.compare-page \.nav>\.btn\{margin-left:auto\}/.test(css));
 t.check("the css braces still balance",
   (css.match(/{/g) || []).length === (css.match(/}/g) || []).length);
+
+t.step("the header is navy with a gold rule, and nothing on it is invisible");
+/* Each of these was a real collision when the bar went navy. A contrast bug is
+   invisible to every other suite, so they are pinned here. */
+{
+  const hdr = /header\{([^}]*)\}/.exec(css);
+  t.check("the bar is navy, in the logo's blues",
+    !!hdr && /var\(--navy2\)/.test(hdr[1]) && /var\(--navy\)/.test(hdr[1]));
+  t.check("with a gold rule along the bottom",
+    !!hdr && /border-bottom:2px solid var\(--gold\)/.test(hdr[1]));
+  t.check("the backdrop-filter is gone — the bar is opaque, so it did nothing",
+    !/header\{[^}]*backdrop-filter/.test(css));
+  t.check("the nav links are white, with a gold underline on hover",
+    /\.navlinks a\{[^}]*color:rgba\(255,255,255/.test(css) &&
+    /\.navlinks a:hover\{[^}]*border-bottom-color:var\(--gold\)/.test(css));
+  t.check("the hover underline cannot shift the row, so the border is always there",
+    /\.navlinks a\{[^}]*border-bottom:2px solid transparent/.test(css));
+  t.check("the navy brand text became white",
+    /\.brandname b\{[^}]*color:#fff/.test(css) && !/\.brandname\{[^}]*color:var\(--navy\)/.test(css));
+  t.check("the hamburger is white too",
+    /\.menu\{[^}]*color:#fff/.test(css));
+  /* .btn-primary is navy. Left alone it would sit navy-on-navy in the bar. */
+  t.check("the bar's navy call-to-action is restyled, and only inside the bar",
+    /\.navlinks \.btn-primary\{[^}]*background:var\(--gold\)/.test(css) &&
+    /\.btn-primary\{background:var\(--navy\)/.test(css));
+  t.check("the divider is a translucent white rule, not a pale one",
+    /\.divider\{[^}]*background:rgba\(255,255,255/.test(css));
+  t.check("the skip link is gold, so it is visible against the navy bar",
+    /\.skip-link\{[^}]*background:var\(--gold\)/.test(css));
+  t.check("the compare page's back link is legible on the navy bar",
+    /\.nav \.btn-outline\{[^}]*color:#fff/.test(css));
+  t.check("the brand shows the name over its Devanagari name",
+    /<span class="brandname"><b>Yojana Setu<\/b><small lang="hi">योजना सेतु<\/small><\/span>/.test(html));
+  t.check("the Devanagari line is in the logo's gold, and marked up as Hindi",
+    /\.brandname small\{[^}]*color:var\(--gold-soft\)/.test(css) && /--gold-soft:/.test(css));
+  t.check("the Devanagari line is dropped on a phone, the name is not",
+    /\.brandname small\{display:none\}/.test(css) &&
+    !/\.divider,\.brandname\{display:none\}/.test(css));
+}
+
+/* The mobile panel used to be styled with inline styles in openMobileNav(),
+   hard-coding a white background — which put white nav links on white once the
+   bar turned navy. It is a stylesheet rule now. */
+t.step("the mobile nav panel is styled in the stylesheet, not inline in js");
+{
+  const panel = /@media\(max-width:1080px\)\{[\s\S]*?\.navlinks\.mobile-open\{/.test(css);
+  t.check("the open panel is a .mobile-open rule in the css", panel);
+  t.check("it is navy, so the white link colour is right in both states",
+    /\.navlinks\.mobile-open\{[^}]*background:var\(--navy2\)/.test(css));
+  /* Scoped to each function body: a lazy [\s\S]*? would run past the closing
+     brace and match a `.style.` in some later function. */
+  const body = (from, to) => js.slice(js.indexOf(from), js.indexOf(to));
+  t.check("openMobileNav() no longer writes inline styles",
+    !/\.style\./.test(body("function openMobileNav(", "function closeMobileNav(")));
+  t.check("closeMobileNav() no longer needs to clear an inline style attribute",
+    !/removeAttribute\("style"\)/.test(body("function closeMobileNav(", "function toggleMobileNav(")));
+  t.check("the panel is full-bleed, so it cannot leave a gap at the edges",
+    /\.navlinks\.mobile-open\{[^}]*left:0;right:0/.test(css));
+}
 
 t.step("section labels: the heading is required, the label above it is not");
 [["Explore", "Explore government schemes"],
@@ -394,6 +484,63 @@ t.step("heading outline is intact");
   const h1s = (html.match(/<h1[\s>]/g) || []).length;
   const h2s = (html.match(/<h2[\s>]/g) || []).length;
   t.check("headings never skip a level (h1 -> h2 only)", h1s === 1 && h2s >= 1, `h1=${h1s} h2=${h2s}`);
+}
+
+t.step("the institution credit and the real logo files");
+{
+  /* An <img src> that 404s is invisible in a text editor and in every other
+     suite here, so the paths are checked against the filesystem directly. */
+  const imgs = [...html.matchAll(/<img\b[^>]*src="([^"]+)"/g)].map(m => m[1])
+    .concat([...cmp.matchAll(/<img\b[^>]*src="([^"]+)"/g)].map(m => m[1]));
+  t.check("no <img> is left pointing at a data: URI placeholder",
+    !imgs.some(s => s.startsWith("data:")) && imgs.length > 0, imgs.join(" | "));
+  const missing = imgs.filter(s => !/^(https?:|data:)/.test(s) && !fs.existsSync(path.join(ROOT, s)));
+  t.check(`every local image path exists on disk (${imgs.length} images)`, missing.length === 0, missing.join(", "));
+  t.check("the navbar uses the supplied logo, not the placeholder",
+    /<img class="logo" src="img\/logo\.webp"/.test(html) && /<img class="logo" src="img\/logo\.webp"/.test(cmp));
+  t.check("the college logo is in the footer, in the bottom corner row",
+    /class="institution"[\s\S]*?src="img\/institution\.webp"/.test(html) &&
+    /class="footer-bottom"/.test(html));
+  t.check("it is named exactly as asked",
+    /Modern Education Society's College of Engineering, Pune/.test(html) &&
+    /class="institution-label">Our institution</.test(html));
+  t.check("the college name is visible text, not only an image",
+    !/Modern Education Society[^<]*<img/.test(html));
+  /* Decorative: the site and college names sit right beside both images, so
+     alt text would make a screen reader say each name twice. */
+  t.check("both images are marked decorative, because their names are adjacent text",
+    [...html.matchAll(/<img class="(?:logo|institution-logo)"[^>]*>/g)]
+      .every(m => /alt=""[^>]*aria-hidden="true"/.test(m[0])));
+  /* Opaque squares: without a radius they read as stray boxes on either the
+     white navbar or the dark footer. */
+  t.check("the square logo art is rounded so it reads as a plate, not a stray box",
+    /\.logo\{[^}]*border-radius:/.test(css) && /\.institution-logo\{[^}]*border-radius:/.test(css));
+  t.check("the institution block cannot be squeezed off the footer edge",
+    /\.institution\{[^}]*max-width:100%/.test(css) && /\.footer-bottom\{[^}]*flex-wrap:wrap/.test(css) &&
+    /\.institution\{[^}]*margin-left:auto/.test(css));
+  t.check("...and goes full width instead of clipping when the space is tight",
+    /@media\(max-width:700px\)\{[\s\S]*?\.institution\{margin-left:0;width:100%\}/.test(css));
+}
+
+t.step("the hero emblem was removed, and left nothing behind");
+{
+  /* Removed on request. These guard against the removal being half-done, which
+     is how dead CSS and orphaned rules get left in a stylesheet. */
+  t.check("no emblem markup in the hero",
+    !/hero-emblem/.test(html) && !/emblem-logo/.test(html));
+  t.check("no emblem CSS left in the stylesheet",
+    !/hero-emblem|emblem-logo/.test(css));
+  t.check("the hero is back to a single column — no orphaned two-column override",
+    !/hero-grid\{grid-template-columns:minmax/.test(css) &&
+    /\.hero-grid\{display:grid;grid-template-columns:1fr/.test(css));
+  t.check("no orphaned `order` rules that existed only to place the emblem",
+    !/\.hero-copy\{order:/.test(css) && !/\.hero-emblem\{[^}]*order:/.test(css));
+  /* The navbar and footer logos are a separate request and must survive. */
+  t.check("the navbar and footer logos are untouched",
+    (html.match(/<img class="logo" src="img\/logo\.webp"/g) || []).length === 2 &&
+    /class="institution-logo" src="img\/institution\.webp"/.test(html));
+  t.check("the hero still leads with the h1, with nothing above it",
+    /<div class="container hero-grid">\s*<div class="hero-copy">\s*<span class="badge"/.test(html));
 }
 
 t.step("markup integrity");

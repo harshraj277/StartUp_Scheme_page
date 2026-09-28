@@ -298,16 +298,17 @@ function isMobileNavOpen(){
   return document.getElementById("navLinks").classList.contains("mobile-open");
 }
 function openMobileNav(){
+  /* The panel's appearance is a .mobile-open rule in the stylesheet. It used to
+     be inline styles here, hard-coding a white panel — which put the now-white
+     nav links on a white background at small widths. */
   const n=document.getElementById("navLinks");
   n.classList.add("mobile-open");
-  n.style.display="flex";n.style.position="absolute";n.style.top="68px";n.style.left="4%";n.style.right="4%";n.style.background="#fff";n.style.padding="16px";n.style.flexDirection="column";n.style.alignItems="stretch";n.style.border="1px solid var(--line)";n.style.borderRadius="14px";n.style.boxShadow="var(--shadow)";n.style.zIndex="60";
   document.getElementById("menuBtn").setAttribute("aria-expanded","true");
   document.getElementById("menuBtn").setAttribute("aria-label","Close menu");
 }
 function closeMobileNav(){
   const n=document.getElementById("navLinks");
   n.classList.remove("mobile-open");
-  n.removeAttribute("style");
   document.getElementById("menuBtn").setAttribute("aria-expanded","false");
   document.getElementById("menuBtn").setAttribute("aria-label","Open menu");
 }
