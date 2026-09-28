@@ -884,10 +884,14 @@ t.step("the institution credit and the real logo files");
   t.check("both images are marked decorative, because their names are adjacent text",
     [...html.matchAll(/<img class="(?:logo|institution-logo)"[^>]*>/g)]
       .every(m => /alt=""[^>]*aria-hidden="true"/.test(m[0])));
-  /* Opaque squares: without a radius they read as stray boxes on either the
-     white navbar or the dark footer. */
+  /* Opaque squares: without a radius they read as stray boxes on the navy bar or
+     the navy footer. The ring that used to go with it was removed on request, so
+     the radius is now the only framing either logo gets. */
   t.check("the square logo art is rounded so it reads as a plate, not a stray box",
     /\.logo\{[^}]*border-radius:/.test(css) && /\.institution-logo\{[^}]*border-radius:/.test(css));
+  t.check("and neither logo carries a border or a ring of its own",
+    !/\.logo\{[^}]*border:/.test(css) && !/\.logo\{[^}]*box-shadow/.test(css) &&
+    !/\.institution-logo\{[^}]*border:/.test(css) && !/\.institution-logo\{[^}]*box-shadow/.test(css));
   t.check("the institution block cannot be squeezed off the footer edge",
     /\.institution\{[^}]*max-width:100%/.test(css) && /\.footer-bottom\{[^}]*flex-wrap:wrap/.test(css) &&
     /\.institution\{[^}]*margin-left:auto/.test(css));
