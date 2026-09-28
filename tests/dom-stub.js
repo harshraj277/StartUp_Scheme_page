@@ -15,16 +15,9 @@ const ROOT = path.resolve(__dirname, "..");
    the test can see it — the same way a browser would. */
 function makeEl(tag, chipCache, store, rowCache) {
   let _html = "";
-  /* One parse per field, keyed on the data attribute the field actually uses
-     (data-sector / data-beneficiary). A single regex would have matched the
-     sector list and silently returned nothing for the beneficiary list, so a
-     test counting its chips would have passed over an empty wall. */
-  const parseChips = (field) => {
-    const key = field || (el._id === "beneficiaryChips" ? "beneficiary" : "sector");
-    chipCache.set(el._id, [..._html.matchAll(new RegExp(
-      '<button class="chip[^"]*" type="button" data-' + key + '="([^"]*)"(?: data-count="(\\d+)")?', "g")
-    )].map(m => ({
-      dataset: { [key]: m[1].replace(/&amp;/g, "&"), count: m[2] === undefined ? undefined : m[2] },
+  const parseChips = () => {
+    chipCache.set(el._id, [..._html.matchAll(/<button class="chip[^"]*" type="button" data-sector="([^"]*)"(?: data-count="(\d+)")?/g)].map(m => ({
+      dataset: { sector: m[1].replace(/&amp;/g, "&"), count: m[2] === undefined ? undefined : m[2] },
       classList: makeEl("div", chipCache, store, rowCache).classList,
       hidden: false,
     })));
@@ -73,17 +66,34 @@ function makeEl(tag, chipCache, store, rowCache) {
   /* resetForm() resets a <select> with selectedIndex = 0, which in a browser
      also changes .value. Modelling only the assignment would leave .value on the
      previously chosen option, so a test could not tell a real reset from a
-     no-op — which is exactly how the old #find-inputs bug hid. */
+     no-op — which is exactly how the old #find-inputs bug hid.
+     For a <select multiple> the browser's rule is different and is the whole
+     reason a multi-select cannot be reset with 0: that selects the first option
+     and leaves every other selection alone. Only -1 clears them all. */
   let _selIdx = 0;
   Object.defineProperty(el, "selectedIndex", {
     get() { return _selIdx; },
     set(i) {
       _selIdx = i | 0;
       if (el.tagName === "SELECT") {
+        if (_selIdx < 0) {
+          el.children.forEach(c => { c.selected = false; });
+        } else {
+          /* On a multiple select, setting an index selects that option and
+             leaves the rest as they were. Only a single-select collapses to one. */
+          if (!el.multiple) el.children.forEach(c => { c.selected = false; });
+          el.children.forEach((c, n) => { if (n === _selIdx) c.selected = true; });
+        }
         el.value = el.children[_selIdx] ? el.children[_selIdx].value : "";
-        el.children.forEach((c, n) => { c.selected = n === _selIdx; });
       }
     },
+  });
+
+  /* <select>.options is the live list of <option>s. selectedValues() reads the
+     selection through it, because on a multi-select .value gives only the first
+     chosen option. */
+  Object.defineProperty(el, "options", {
+    get() { return el.tagName === "SELECT" ? el.children : []; },
   });
 
   Object.defineProperty(el, "innerHTML", {
@@ -126,11 +136,8 @@ function runQuery(sel, chipCache, rowCache, hostId, store) {
 
 /* The controls inside <section class="find">, by tag. resetForm() clears them by
    selector, so the stub has to know which is which. */
-/* The two chip fields' filter boxes are inputs inside #find, so resetForm()
-   clears them with the rest of the form by selector. */
-const CHIP_FILTERS = ["sectorFilter", "beneficiaryFilter"];
-const FORM_INPUTS = ["startupName", ...CHIP_FILTERS];
-const FORM_SELECTS = ["state", "stage", "recognition", "access", "support", "funding"];
+const FORM_INPUTS = ["startupName", "sectorFilter"];
+const FORM_SELECTS = ["state", "stage", "business", "recognition", "access", "support", "funding"];
 
 /* The same controls, for tag: a test asserting a field is a <select> needs the
    stub to agree with the markup. sort/fMinistry and friends are selects too. */
@@ -140,9 +147,7 @@ const INPUT_IDS = ["searchInput", ...FORM_INPUTS];
 /* Every id index.html provides. Pre-creating them keeps the stub honest. */
 const PAGE_IDS = ["trustCount","trustMinistries","dashVerified","heroBadge","sectorChips","sectorChipsCount","sectorFilter",
  "fMinistry","fType","fStatus","fFinance","fRepay","govLevelNote",
- "beneficiaryChips","beneficiaryFilter","beneficiaryChipsCount","beneficiaryToggleBtn",
- "beneficiaryPanel","beneficiaryPickerBtn","beneficiaryPickerLabel",
- "fundCoverage","accessCoverage","accessTag","stage","recognition","state","access","support","funding",
+ "fundCoverage","accessCoverage","accessTag","stage","business","businessPicked","recognition","state","access","support","funding",
  "startupName","results","resultCount","paginationWrap","prevPageBtn","nextPageBtn","pagingInfo","browseToolbar","filtersPanel","modeBanner","sectorToggleBtn",
  "sectorPanel","sectorPickerBtn","sectorPickerLabel",
  "quickFilterBanner","resultsHeading","searchInput","sort","toast","modalBackdrop","modalContent",
@@ -178,17 +183,23 @@ function makeCtx(ids, chipCache, rowCache) {
      value that was never there. An <option> with no value attribute takes its
      text as its value, which is what State / UT and the funding range rely on. */
   for (const m of fs.readFileSync(path.join(ROOT, "index.html"), "utf8")
-    .matchAll(/<select id="([\w-]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+    .matchAll(/<select id="([\w-]+)"([^>]*)>([\s\S]*?)<\/select>/g)) {
     const el = store[m[1]];
     if (!el) continue;
-    for (const o of m[2].matchAll(/<option([^>]*)>([\s\S]*?)<\/option>/g)) {
+    /* <select multiple> changes what "selected" means and what a reset has to
+       do, so the stub has to know which selects are multi. */
+    el.multiple = /multiple/.test(m[2]);
+    for (const o of m[3].matchAll(/<option([^>]*)>([\s\S]*?)<\/option>/g)) {
       const text = o[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&");
       const opt = makeEl("option", chipCache, store, rowCache);
       opt.value = /value="([^"]*)"/.test(o[1]) ? /value="([^"]*)"/.exec(o[1])[1] : text;
       opt.textContent = text;
       el.appendChild(opt);
     }
-    el.selectedIndex = 0;
+    /* A single select starts on its first option; a multi select starts on
+       nothing, because -1 (nothing selected) is the only honest starting state
+       once several can be chosen. */
+    el.selectedIndex = el.multiple ? -1 : 0;
   }
 
   const localStorage = { _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = v; } };

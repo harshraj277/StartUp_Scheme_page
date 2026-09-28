@@ -1,6 +1,5 @@
 /* End-to-end: boots the real app.js in a stub DOM and drives it as a user would.
    Run: node tests/e2e.test.js */
-const fs = require("fs");
 const { makeEnv, makeReporter } = require("./dom-stub");
 const t = makeReporter("e2e");
 
@@ -9,8 +8,6 @@ return {
   get currentResults(){ return currentResults; },
   get currentMode(){ return currentMode; },
   get eligSectors(){ return eligSectors; },
-  get eligBeneficiaries(){ return eligBeneficiaries; },
-  get eligProfile(){ return eligProfile; },
   findSchemes, resetToBrowse, resetForm, onSearchInput, onFilterChange,
   goToPage, nextPage, prevPage, totalPages, currentList,
   get currentPage(){ return currentPage; },
@@ -21,24 +18,28 @@ return {
   filterSectorChips, applyQuickFilter, resetForm,
   toggleSectorList, applySectorChips, toggleEligSector,
   toggleSectorPanel, closeSectorPanel,
-  filterBeneficiaryChips, applyBeneficiaryChips, toggleEligBeneficiary,
-  toggleBeneficiaryPanel, closeBeneficiaryPanel, toggleBeneficiaryList,
-  resolveAgainst,
+  resolveAgainst, selectedValues, syncBusinessPicks, clearBusinessPicks,
   SCHEMES, ALL_SECTORS, ALL_STAGES, ALL_BENEFICIARIES, SUPPORT_BUCKETS, searchScore
 };`;
 const { api, $, cards, chipCache } = makeEnv(EX);
-/* Business / Beneficiary Type is a chip field, not a control with a .value, so
-   clearing the form has to clear its selection set and its filter box. Leaving
-   either behind would let a "clean form" step run against a stale selection. */
-const clearForm = () => {
-  ["startupName","sectorFilter","beneficiaryFilter"].forEach(i => { $(i).value = ""; });
-  ["stage","recognition","access","support","funding","state"].forEach(i => { $(i).selectedIndex = 0; });
-  api.eligSectors.clear();
-  api.eligBeneficiaries.clear();
+/* Setting .value = "" does NOT clear a <select multiple>: it deselects
+   options whose value is "", and a multi-select has none. clearForm() below used
+   to do exactly that, so picks survived between steps and every later
+   assertion was reading a dirty form. */
+const pickBusiness = (values) => {
+  const el = $("business");
+  el.children.forEach(o => { o.selected = values.indexOf(o.value) > -1; });
+  el.value = values.length ? el.children.find(o => o.selected).value : "";
+  api.syncBusinessPicks();
 };
-/* The chip lists the stub parsed out of the rendered markup. */
-const chips = (f) => (chipCache.get(f + "Chips") || []);
-const html = fs.readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+const businessPicks = () => $("business").children.filter(o => o.selected).map(o => o.value);
+
+const clearForm = () => {
+  ["stage","recognition","access","support","funding","state","startupName"].forEach(i => { $(i).value = ""; });
+  ["recognition","access","support","funding","state"].forEach(i => { $(i).selectedIndex = 0; });
+  pickBusiness([]);
+  api.eligSectors.clear();
+};
 
 try {
   t.step("Boot — initControls ran on load");
@@ -130,9 +131,8 @@ try {
      profile goes through, so that path stays tested here. */
   t.check("a stage value can only be one the dataset contains",
     $("stage").children.every(c => c.value === "" || api.ALL_STAGES.indexOf(c.value) > -1));
-  t.check("a beneficiary chip can only carry one the dataset contains",
-    chips("beneficiary").every(c => api.ALL_BENEFICIARIES.indexOf(c.dataset.beneficiary) > -1),
-    chips("beneficiary").length + " chips checked");
+  t.check("a beneficiary value can only be one the dataset contains",
+    $("business").children.every(c => api.ALL_BENEFICIARIES.indexOf(c.value) > -1));
   t.check("fuzzy resolution still works underneath, for a restored value",
     api.resolveAgainst("early strt", api.ALL_STAGES).value === "Early Stage");
   t.check("and it still refuses cleanly on text that means nothing",
@@ -146,10 +146,7 @@ try {
   t.step("Find My Schemes — a full profile");
   clearForm(); api.resetToBrowse();
   $("stage").value = "Idea";
-  /* A chip selection, not a .value assignment: this used to set
-     $("business").value, which no longer existed, so the beneficiary dimension
-     of the "full profile" test had quietly stopped running at all. */
-  api.toggleEligBeneficiary("DPIIT-recognised startups");
+  $("business").value = "DPIIT-recognised startups";
   $("recognition").value = "DPIIT";
   $("support").value = "grant";
   $("funding").value = "₹25 lakh–₹1 crore";
@@ -163,13 +160,6 @@ try {
   t.check("Funding Required produces a visible reason", /can reach your requested range/.test($("results").innerHTML));
   t.check("top cards cite the user's actual sector", /Covers your selected sector/.test($("results").innerHTML));
   t.check("Support Type produces a visible reason", /the kind of support you asked for/.test($("results").innerHTML));
-  t.check("the beneficiary type is actually in the profile, so the above was a real run",
-    api.eligProfile.beneficiaries.length === 1 &&
-    api.eligProfile.beneficiaries[0] === "DPIIT-recognised startups",
-    JSON.stringify(api.eligProfile.beneficiaries));
-  t.check("and it produces its own visible reason",
-    /Open to beneficiaries like <strong>DPIIT-recognised startups<\/strong>/.test($("results").innerHTML),
-    ($("results").innerHTML.match(/Open to beneficiaries like[^<]*<strong>[^<]*/) || [""])[0]);
   const names = api.currentResults.map(r => r.s.short_name);
   t.check("agritech schemes are present in the results", ["AgriSURE","RKVY-RAFTAAR","BHARATI"].some(n => names.includes(n)));
   t.check("refinement banner appears when the result set is large", /narrow \d+ results/.test($("modeBanner").innerHTML));
@@ -452,13 +442,9 @@ try {
   t.check("clearing compare leaves the shortlist intact", api.saved.length === 4);
   t.check("the shortlist is untouched by any of it", api.saved.length === 4);
 
-  /* Uses the top-level chips("sector") helper. This block used to declare its
-     own `const chips`, which shadowed it for the whole enclosing block and put
-     the outer name in its temporal dead zone — so a check earlier in the file
-     threw "Cannot access 'chips' before initialization" even though it was
-     written before this line. */
-  const visible = () => chips("sector").filter(c => !c.hidden).map(c => c.dataset.sector);
-  const countOf = (s) => parseInt((chips("sector").find(c => c.dataset.sector === s) || { dataset: {} }).dataset.count, 10) || 0;
+  const chips = () => (chipCache.get("sectorChips") || []);
+  const visible = () => chips().filter(c => !c.hidden).map(c => c.dataset.sector);
+  const countOf = (s) => parseInt((chips().find(c => c.dataset.sector === s) || { dataset: {} }).dataset.count, 10) || 0;
 
   t.step("Sector field — opens and closes like the State / UT dropdown");
   t.check("the sector panel starts closed", $("sectorPanel").hidden === true);
@@ -488,8 +474,8 @@ try {
   t.check("reset clears the control back to the placeholder", $("sectorPickerLabel").textContent === "Select sectors…");
 
   t.step("Sector chips — collapsed by default, long tail reachable");
-  t.check(`all ${api.ALL_SECTORS.length} sectors are still rendered (collapse hides, never removes)`, chips("sector").length === api.ALL_SECTORS.length);
-  t.check(`collapsed by default: ${visible().length} of ${chips("sector").length} shown`, visible().length < chips("sector").length && visible().length > 0);
+  t.check(`all ${api.ALL_SECTORS.length} sectors are still rendered (collapse hides, never removes)`, chips().length === api.ALL_SECTORS.length);
+  t.check(`collapsed by default: ${visible().length} of ${chips().length} shown`, visible().length < chips().length && visible().length > 0);
   t.check("every collapsed-in sector reaches at least 2 schemes",
     visible().every(s => countOf(s) >= 2), visible().filter(s => countOf(s) < 2).join(", "));
   t.check(`count line is honest: "${$("sectorChipsCount").textContent}"`,
@@ -499,7 +485,7 @@ try {
   t.check("toggle reports collapsed state to assistive tech", $("sectorToggleBtn").getAttribute("aria-expanded") === "false");
 
   api.toggleSectorList();
-  t.check(`expanded: ${visible().length} of ${chips("sector").length} shown`, visible().length === chips("sector").length);
+  t.check(`expanded: ${visible().length} of ${chips().length} shown`, visible().length === chips().length);
   t.check("toggle flips to collapse", /^Show fewer ▴$/.test($("sectorToggleBtn").textContent));
   t.check("toggle reports expanded state to assistive tech", $("sectorToggleBtn").getAttribute("aria-expanded") === "true");
 
@@ -520,7 +506,7 @@ try {
   $("sectorFilter").value = "";
   api.filterSectorChips();
   t.check("clearing the search restores the collapsed default, not the full list",
-    visible().length === chips("sector").filter(c => +c.dataset.count >= 2).length);
+    visible().length === chips().filter(c => +c.dataset.count >= 2).length);
   t.check("the toggle comes back", $("sectorToggleBtn").hidden === false);
 
   t.check("every sector is reachable by typing its own name", api.ALL_SECTORS.every(s => {
@@ -530,7 +516,7 @@ try {
   t.check("previously unreachable sectors are still selectable", ["Quantum Computing","Agritech","FinTech"].every(s => api.ALL_SECTORS.includes(s)));
 
   api.resetForm();
-  t.check(`reset returns to the collapsed default (${visible().length} shown)`, visible().length === chips("sector").filter(c => +c.dataset.count >= 2).length);
+  t.check(`reset returns to the collapsed default (${visible().length} shown)`, visible().length === chips().filter(c => +c.dataset.count >= 2).length);
   t.check("reset clears the sector filter box", $("sectorFilter").value === "");
   t.check("reset clears the selection", api.eligSectors.size === 0);
 } catch (e) {
@@ -538,221 +524,109 @@ try {
 }
 
 try {
-  t.step("Business / Beneficiary Type is a multi-select chip field, like Industry / Sector");
-  const total = api.ALL_BENEFICIARIES.length;
+  t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
+  const opts = (id) => $("" + id).children;
 
-  /* Every value the dataset holds is offered, and every one carries the number
-     of schemes that reach it. 56 of the 76 values reach exactly one scheme, so
-     without the count a one-off label is indistinguishable from "Startups (16)". */
-  t.check(`all ${total} dataset values are offered as chips`,
-    chips("beneficiary").length === total, chips("beneficiary").length);
-  t.check("there is no <select> and no datalist for beneficiary any more",
-    !/<select id="business"/.test(html) && !/<input id="business"/.test(html) && !/<datalist/.test(html));
-  t.check("it is the same shape as the sector field: a picker plus a chip list",
-    /id="beneficiaryPickerBtn"/.test(html) && /id="beneficiaryChips"/.test(html) &&
-    /id="beneficiaryFilter"/.test(html) && /id="beneficiaryToggleBtn"/.test(html));
-  /* Read the rendered chips, not index.html: the chips are built by initControls()
-     from the dataset, so the markup file holds no data-beneficiary attribute at
-     all and a regex over it would be testing nothing. */
-  const chipByName = (f, n) => chips(f).find(c => c.dataset[f] === n);
-  t.check("every chip carries the number of schemes that reach it",
-    chips("beneficiary").every(c => c.dataset.count !== undefined && c.dataset.count !== ""),
-    chips("beneficiary").filter(c => c.dataset.count === undefined).length + " without a count");
-  t.check("a widely-reached value shows its real number",
-    chipByName("beneficiary", "Startups").dataset.count === "16",
-    chipByName("beneficiary", "Startups").dataset.count);
-  t.check("a one-off value is visibly a one-off",
-    chipByName("beneficiary", "Artisans").dataset.count === "1",
-    chipByName("beneficiary", "Artisans").dataset.count);
-  t.check("the sector chips carry counts the same way, from the same helper",
-    chipByName("sector", "Agritech").dataset.count !== undefined,
-    chipByName("sector", "Agritech").dataset.count);
-  t.check("the label says one or more, because it now takes more than one",
-    /Business \/ Beneficiary Type[\s\S]{0,120}select one or more/.test(html));
+  t.check("both are <select> elements, so the browser draws its own dropdown",
+    $("stage").tagName === "SELECT" && $("business").tagName === "SELECT",
+    $("stage").tagName + "/" + $("business").tagName);
+  t.check(`the stage dropdown offers all ${api.ALL_STAGES.length} dataset stages`,
+    opts("stage").length === api.ALL_STAGES.length + 1, opts("stage").length);
+  t.check(`the beneficiary dropdown offers all ${api.ALL_BENEFICIARIES.length} dataset values`,
+    opts("business").length === api.ALL_BENEFICIARIES.length, opts("business").length);
+  t.check("stage is a single-choice select with a labelled empty option, like State / UT's",
+    $("stage").multiple === false && $("stage").children[0].value === "" &&
+    /Select business stage/.test($("stage").children[0].textContent));
+  t.check("the empty option is the one selected on load, so nothing is pre-filled",
+    $("stage").children[0].selected === true);
 
-  /* Multi-select is the whole point: a founder can be more than one of these. */
-  t.check("selecting one type records it",
-    (api.toggleEligBeneficiary("Startups"), api.eligBeneficiaries.has("Startups")));
-  t.check("selecting a second type keeps the first",
-    (api.toggleEligBeneficiary("MSMEs"),
-     api.eligBeneficiaries.size === 2 && api.eligBeneficiaries.has("Startups") &&
-     api.eligBeneficiaries.has("MSMEs")), [...api.eligBeneficiaries].join(", "));
-  t.check("clicking the same chip again deselects it",
-    (api.toggleEligBeneficiary("MSMEs"), !api.eligBeneficiaries.has("MSMEs") &&
-     api.eligBeneficiaries.size === 1));
-  t.check("selected chips are marked active",
-    chips("beneficiary").filter(c => c.classList.contains("active")).length === 1);
-  t.check("the closed picker reports what is selected",
-    $("beneficiaryPickerLabel").textContent === "Startups", $("beneficiaryPickerLabel").textContent);
-  api.toggleEligBeneficiary("Startups");
+  t.step("Beneficiary Type is a multiple select");
+  t.check("the markup says multiple, so the browser allows several picks",
+    /<select id="business" multiple/.test(require("fs").readFileSync("index.html", "utf8")) &&
+    $("business").multiple === true);
+  t.check("nothing is selected on load \u2014 a multi-select has no placeholder row",
+    businessPicks().length === 0, businessPicks().join(" | "));
+  t.check("and none is in the markup either, so no empty option can be picked by accident",
+    $("business").children.every(c => c.value !== ""));
+  /* A native multi-select is 4 rows tall by default, which is a peephole into 76
+     options. The size attribute is what gives it a usable height. */
+  t.check("the list box is given real rows, not the browser default of four",
+    /<select id="business" multiple size="(\d+)"/.test(
+      require("fs").readFileSync("index.html", "utf8")) &&
+    Number(/size="(\d+)"/.exec(require("fs").readFileSync("index.html", "utf8"))[1]) >= 6,
+    (/<select id="business"[^>]*>/.exec(require("fs").readFileSync("index.html", "utf8")) || [])[0]);
+  t.check("it keeps a normal grid cell, so the form gains no empty cell",
+    !/class="field field-multi"/.test(require("fs").readFileSync("index.html", "utf8")) &&
+    !/\.field-multi\{/.test(require("fs").readFileSync("css/styles.css", "utf8")));
 
-  /* Collapse, exactly as sectors do: only values reaching 2+ schemes by default. */
-  const shownNow = chips("beneficiary").filter(c => !c.hidden).length;
-  t.check(`the list collapses by default: ${shownNow} of ${total} chips visible`,
-    shownNow > 0 && shownNow < total, shownNow);
-  t.check("the count line says the hidden ones each reach just one scheme",
-    /hidden ones each reach just one scheme/.test($("beneficiaryChipsCount").textContent),
-    $("beneficiaryChipsCount").textContent);
-  t.check("the toggle offers to reveal the rest",
-    new RegExp("Show all " + total).test($("beneficiaryToggleBtn").textContent),
-    $("beneficiaryToggleBtn").textContent);
-  api.toggleBeneficiaryList();
-  t.check("and it does — the whole list becomes visible",
-    chips("beneficiary").filter(c => !c.hidden).length === total,
-    chips("beneficiary").filter(c => !c.hidden).length);
-  api.toggleBeneficiaryList();
+  /* Several picks must be readable back, with no duplicates. Order is document
+     order, not click order: el.options is in DOM order in a browser too, and
+     nothing downstream depends on the order. */
+  pickBusiness(["Startups", "MSMEs", "DPIIT-recognised startups"]);
+  t.check("three picks are all readable, not just the first",
+    businessPicks().length === 3 &&
+    businessPicks().slice().sort().join("|") === "DPIIT-recognised startups|MSMEs|Startups",
+    businessPicks().join(" | "));
+  t.check("a <select multiple>'s .value is only the first option in document order, which is why the",
+    $("business").value === "DPIIT-recognised startups", $("business").value);
+  t.check("matcher reads the options, not .value", api.selectedValues($("business")).length === 3);
 
-  /* A selected value must never be hidden: you cannot deselect what you cannot see. */
-  api.toggleEligBeneficiary("Artisans");            /* reaches exactly 1 scheme */
-  api.applyBeneficiaryChips();
-  t.check("a selected one-off value stays visible so it can be turned off",
-    chips("beneficiary").filter(c => c.dataset.beneficiary === "Artisans")[0].hidden === false);
-  api.toggleEligBeneficiary("Artisans");
+  /* The picks are only a highlight that scrolls away, so they are echoed. */
+  t.check("the picks are spelled out under the control",
+    /3 selected/.test($("businessPicked").innerHTML) &&
+    /Startups/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
+  t.check("and there is a way to drop them all without hunting in 76 rows",
+    /Clear/.test($("businessPicked").innerHTML));
+  pickBusiness([]);
+  t.check("with nothing picked the note says so and says how to pick several",
+    /Nothing selected/.test($("businessPicked").innerHTML) &&
+    /Ctrl/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
+  t.check("and the Clear button is gone when there is nothing to clear",
+    !/Clear/.test($("businessPicked").innerHTML));
 
-  /* Typing filters, and shows every match rather than only the frequent ones. */
-  $("beneficiaryFilter").value = "biotech";
-  api.filterBeneficiaryChips();
-  const vis = chips("beneficiary").filter(c => !c.hidden);
-  t.check(`typing "biotech" narrows ${total} values to ${vis.length}`,
-    vis.length > 0 && vis.every(c => /biotech/i.test(c.dataset.beneficiary)), vis.length);
-  t.check("and the count line reports the narrowed set",
-    /match/.test($("beneficiaryChipsCount").textContent) && /biotech/.test($("beneficiaryChipsCount").textContent),
-    $("beneficiaryChipsCount").textContent);
-  t.check("searching reveals one-off matches that the collapsed list hid",
-    vis.some(c => c.dataset.beneficiary === "Biotech startups indirectly"),
-    vis.map(c => c.dataset.beneficiary).join(", "));
-  $("beneficiaryFilter").value = "";
-  api.filterBeneficiaryChips();
+  pickBusiness(["Startups", "MSMEs"]);
+  api.clearBusinessPicks();
+  t.check("Clear empties the list box", businessPicks().length === 0, businessPicks().join(" | "));
+  t.check("and the note goes back to its empty wording",
+    /Nothing selected/.test($("businessPicked").innerHTML));
 
-  /* Opens and closes like the sector field. */
-  t.check("the picker opens the panel and says so to assistive tech",
-    (api.toggleBeneficiaryPanel(), $("beneficiaryPanel").hidden === false &&
-      $("beneficiaryPickerBtn").getAttribute("aria-expanded") === "true"));
-  t.check("it toggles shut again",
-    (api.toggleBeneficiaryPanel(), $("beneficiaryPanel").hidden === true &&
-      $("beneficiaryPickerBtn").getAttribute("aria-expanded") === "false"));
-  t.check("closeBeneficiaryPanel is idempotent, so Escape cannot double-toggle",
-    (api.toggleBeneficiaryPanel(), api.closeBeneficiaryPanel(), api.closeBeneficiaryPanel(),
-     $("beneficiaryPanel").hidden === true));
+  const stageLabels = opts("stage").map(c => c.textContent);
+  const bizLabels = opts("business").map(c => c.textContent);
+  t.check("every option states how many schemes reach it, so one-off labels are visible",
+    stageLabels.includes("Idea (33)") && bizLabels.includes("Startups (16)"),
+    stageLabels.slice(0, 3).join(" | "));
+  t.check("options are alphabetical, so the list can be scanned",
+    stageLabels.indexOf("Commercialisation (2)") > -1 &&
+      stageLabels.indexOf("Commercialisation (2)") < stageLabels.indexOf("Growth (40)"),
+    stageLabels.join(" | "));
+  t.check("a rare stage reads as rare rather than equal to a common one",
+    stageLabels.includes("Pilot (1)") && stageLabels.includes("Early Stage (45)"));
+  /* textContent is a text node. esc() belongs on the paths that build an
+     HTML string; applied here it displayed the entities themselves, so this
+     option read "R&amp;D (3)" instead of "R&D (3)". */
+  t.check("an ampersand value is shown literally, not as an escaped entity",
+    stageLabels.includes("R&D (3)") &&
+      !stageLabels.some(l => l.indexOf("&amp;") > -1 || l.indexOf("&#39;") > -1),
+    stageLabels.filter(l => l.indexOf("D (3)") > -1).join(" | "));
 
-  /* Stage is deliberately NOT multi-select: a startup is at one stage, so a
-     second one would be a contradiction rather than a wider match. */
-  t.check("Business Stage is still a single-value <select>",
-    $("stage").tagName === "SELECT" && $("stage").children.length === api.ALL_STAGES.length + 1,
-    $("stage").tagName + " with " + $("stage").children.length + " options");
+  const ideaOpt = $("stage").children.find(c => c.value === "Idea");
+  t.check("option .value is the bare dataset value, the count is only in the label",
+    !!ideaOpt && ideaOpt.value === "Idea" && ideaOpt.textContent === "Idea (33)");
+  $("stage").value = "Early Stage";
+  t.check("selecting a stage stores the exact dataset string the matcher compares",
+    $("stage").value === "Early Stage");
 
-  /* Scoring: two chosen types must score a scheme listing both above one
-     listing a single type, and the reason must name the ones that matched. */
-  clearForm();
-  $("startupName").value = "BioBot";
-  api.toggleEligBeneficiary("Startups");
-  api.findSchemes();
-  t.check("one beneficiary type returns matches", api.currentResults.length > 0, api.currentResults.length);
-  const topOne = api.currentResults[0];
-  api.toggleEligBeneficiary("MSMEs");
-  api.findSchemes();
-  t.check("adding a second type still returns matches",
-    api.currentResults.length > 0, api.currentResults.length);
-  t.check("the profile carries both, as an array",
-    api.eligProfile.beneficiaries.length === 2 && api.eligProfile.beneficiaries.includes("MSMEs"),
-    JSON.stringify(api.eligProfile.beneficiaries));
-  t.check("the old single-value fields are gone from the profile",
-    api.eligProfile.business === undefined && api.eligProfile.businessValue === undefined);
-  /* A scheme listing both of your types is credited for both, and that has to
-     show in the reason — otherwise the extra point is invisible and unprovable. */
-  const bothTop = api.currentResults.filter(r =>
-    r.s.target_beneficiaries.includes("Startups") && r.s.target_beneficiaries.includes("MSMEs"));
-  t.check("a scheme listing both types is reachable by the pair", bothTop.length > 0, bothTop.length);
-  t.check("it outranks one that lists only a single type",
-    (() => {
-      const both = bothTop[0], oneOnly = api.currentResults.find(r =>
-        r.s.target_beneficiaries.includes("Startups") && !r.s.target_beneficiaries.includes("MSMEs"));
-      return !oneOnly || both.score > oneOnly.score;
-    })(),
-    bothTop[0] ? bothTop[0].score + " vs " + (api.currentResults.find(r =>
-      r.s.target_beneficiaries.includes("Startups") && !r.s.target_beneficiaries.includes("MSMEs")) || {}).score : "no pair match");
-  t.check("the reason names the specific types that matched, not the whole selection",
-    /Open to beneficiaries like[^<]*<strong>Startups, MSMEs<\/strong>/.test($("results").innerHTML),
-    ($("results").innerHTML.match(/Open to beneficiaries like[^<]*<strong>[^<]*/) || [""])[0]);
-  t.check("and it does not credit a type the scheme does not list",
-    !/<strong>Startups, MSMEs, /.test($("results").innerHTML));
-
-  /* A type nothing lists must not dead-end silently. */
-  clearForm();
-  $("startupName").value = "Nobody";
-  api.toggleEligBeneficiary("Artisans");
-  api.toggleEligBeneficiary("SC entrepreneurs");
-  api.findSchemes();
-  t.check("results only ever contain schemes listing a chosen type",
-    api.currentResults.every(r => r.s.target_beneficiaries.includes("Artisans") ||
-                                  r.s.target_beneficiaries.includes("SC entrepreneurs")),
-    api.currentResults.length + " results");
-  t.check("the empty state names the types that reach nothing",
-    /as a beneficiary type|potential match/.test($("results").innerHTML + $("resultCount").textContent),
-    $("resultCount").textContent);
-
-  /* resetForm must clear the second chip field, or the next run inherits it. */
-  api.toggleEligBeneficiary("Startups");
-  $("beneficiaryFilter").value = "biotech";
-  api.toggleBeneficiaryList();
-  api.toggleBeneficiaryPanel();
+  /* The reset is where a multi-select quietly breaks: selectedIndex = 0 selects
+     the first option and leaves the rest, so "Reset" would have kept the picks. */
+  pickBusiness(["Startups", "MSMEs", "Researchers"]);
+  $("stage").selectedIndex = 3;
   api.resetForm();
-  t.check("resetForm clears the beneficiary selection",
-    api.eligBeneficiaries.size === 0, [...api.eligBeneficiaries].join(", "));
-  t.check("resetForm clears its filter box", $("beneficiaryFilter").value === "",
-    $("beneficiaryFilter").value);
-  t.check("resetForm re-collapses the list",
-    new RegExp("Show all " + total).test($("beneficiaryToggleBtn").textContent),
-    $("beneficiaryToggleBtn").textContent);
-  t.check("resetForm closes an open panel", $("beneficiaryPanel").hidden === true);
-  t.check("resetForm empties the picker label",
-    $("beneficiaryPickerLabel").textContent === "Select beneficiary types…",
-    $("beneficiaryPickerLabel").textContent);
-
-  /* The two chip fields must not share state — the one bug a copy-paste of the
-     sector code would have introduced. */
-  api.toggleEligSector("Agritech");
-  t.check("selecting a sector does not select a beneficiary type",
-    api.eligBeneficiaries.size === 0 && api.eligSectors.size === 1);
-  api.toggleEligBeneficiary("Startups");
-  t.check("and selecting a beneficiary type does not deselect the sector",
-    api.eligSectors.has("Agritech") && api.eligBeneficiaries.has("Startups"));
-  t.check("the two pickers report their own selections",
-    $("sectorPickerLabel").textContent === "Agritech" &&
-    $("beneficiaryPickerLabel").textContent === "Startups",
-    $("sectorPickerLabel").textContent + " / " + $("beneficiaryPickerLabel").textContent);
-  /* Snapshot before the filter, or the check compares a value with itself and
-     always passes — which is exactly what the previous version did. */
-  const sectorVisibleBefore = chips("sector").filter(c => !c.hidden).length;
-  $("beneficiaryFilter").value = "biotech";
-  api.filterBeneficiaryChips();
-  t.check("filtering the beneficiary list does not filter the sector list",
-    chips("beneficiary").filter(c => !c.hidden).length < total &&
-    chips("sector").filter(c => !c.hidden).length === sectorVisibleBefore,
-    chips("sector").filter(c => !c.hidden).length + " vs " + sectorVisibleBefore);
-  $("beneficiaryFilter").value = "";
-  api.filterBeneficiaryChips();
-
-  /* Each field reads its OWN expanded flag, so expanding one must leave the
-     other's button and chip count exactly as they were. */
-  const bizExpandedBefore = $("beneficiaryToggleBtn").getAttribute("aria-expanded");
-  api.toggleSectorList();
-  t.check("expanding the sector list does not expand the beneficiary list",
-    $("sectorToggleBtn").getAttribute("aria-expanded") === "true" &&
-    $("beneficiaryToggleBtn").getAttribute("aria-expanded") === bizExpandedBefore,
-    "sector=true beneficiary=" + $("beneficiaryToggleBtn").getAttribute("aria-expanded"));
-  t.check("and only the sector list is revealed",
-    chips("sector").filter(c => !c.hidden).length > sectorVisibleBefore &&
-    chips("beneficiary").filter(c => !c.hidden).length < total,
-    chips("sector").filter(c => !c.hidden).length + " / " +
-    chips("beneficiary").filter(c => !c.hidden).length);
-  api.toggleSectorList();
-  t.check("collapsing it again restores the original state",
-    $("sectorToggleBtn").getAttribute("aria-expanded") === "false" &&
-    chips("sector").filter(c => !c.hidden).length === sectorVisibleBefore,
-    chips("sector").filter(c => !c.hidden).length + " vs " + sectorVisibleBefore);
-
-  clearForm();
+  t.check("resetForm deselects every pick, not just the first",
+    businessPicks().length === 0, businessPicks().join(" | "));
+  t.check("resetForm puts the single-selects back to their empty option",
+    $("stage").value === "", JSON.stringify($("stage").value));
+  t.check("and the note under the multi-select agrees it is empty",
+    /Nothing selected/.test($("businessPicked").innerHTML));
 } catch (e) {
   t.bad("threw: " + e.stack.split("\n").slice(0, 3).join(" | "));
 }

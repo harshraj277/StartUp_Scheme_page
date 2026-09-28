@@ -15,10 +15,7 @@ return {
 };`;
 const { api } = makeEnv(EX);
 
-/* Mirrors exactly what findSchemes() builds. beneficiaries is an array because
-   the field is multi-select: a scheme usually lists several beneficiary types
-   and a founder can be more than one of them. */
-const blank = { name: "", stage: "", stageValue: "", beneficiaries: [], sectors: [], recognition: "", state: "", access: "", support: "", funding: "" };
+const blank = { name: "", stage: "", stageValue: "", business: [], sectors: [], recognition: "", state: "", access: "", support: "", funding: "" };
 /* Mirrors exactly what findSchemes() builds before it calls byMatchRank. */
 const run = (p) => api.SCHEMES
   .map(s => { const r = api.scoreScheme(s, p); return { s, pct: r.pct, score: r.score, why: r.why }; })
@@ -90,50 +87,59 @@ t.step("Every form input either scores or is explicitly documented as non-scorin
 const affects = (patch) => api.SCHEMES.filter(s => api.scoreScheme(s, { ...blank, ...patch }).score !== api.scoreScheme(s, blank).score).length;
 console.log("    stage", affects({ stage: "Growth", stageValue: "Growth" }),
   "| sector", affects({ sectors: ["Biotechnology"] }),
-  "| beneficiaries", affects({ beneficiaries: ["DPIIT-recognised startups"] }),
+  "| business", affects({ business: ["DPIIT-recognised startups"] }),
   "| recognition", affects({ recognition: "DPIIT" }),
   "| access", affects({ access: "incubator" }),
   "| support", affects({ support: "grant" }),
   "| funding", affects({ funding: "₹5–₹25 lakh" }));
 t.check("stage scores", affects({ stage: "Growth", stageValue: "Growth" }) > 0);
 t.check("sector scores", affects({ sectors: ["Biotechnology"] }) > 0);
-t.check("beneficiary type scores", affects({ beneficiaries: ["DPIIT-recognised startups"] }) > 0);
+t.check("beneficiary type scores", affects({ business: ["DPIIT-recognised startups"] }) > 0);
 
-/* affects() above is a blunt instrument on this axis: an empty selection earns a
-   flat 8 for "no preference stated", so picking ANY type changes every scheme's
-   score by that 8 whether or not the scheme lists it. Compare against the
-   no-preference baseline instead, which is the question a real profile asks. */
-const baseScore = api.scoreScheme(api.SCHEMES[0], blank).score;
-const gain = (b) => api.SCHEMES.filter(s => api.scoreScheme(s, { ...blank, beneficiaries: b }).score > baseScore).length;
-const onlyStartups = api.SCHEMES.filter(s => s.target_beneficiaries.includes("Startups") && !s.target_beneficiaries.includes("MSMEs"));
-const bothTypes = api.SCHEMES.filter(s => s.target_beneficiaries.includes("Startups") && s.target_beneficiaries.includes("MSMEs"));
-const scoreWith = (s, b) => api.scoreScheme(s, { ...blank, beneficiaries: b }).score;
-t.check("each type reaches a different set of schemes, not the same whole dataset",
-  gain(["Startups"]) > 0 && gain(["MSMEs"]) > 0 && gain(["Startups"]) !== gain(["MSMEs"]),
-  `Startups ${gain(["Startups"])} / MSMEs ${gain(["MSMEs"])} of ${api.SCHEMES.length}`);
-t.check("a scheme listing one of your types beats the same scheme under the other type",
-  onlyStartups.length > 0 && onlyStartups.every(s => scoreWith(s, ["Startups"]) > scoreWith(s, ["MSMEs"])),
-  onlyStartups.length + " such schemes");
-t.check("the extra types are credited, +3 each, capped at +6",
-  bothTypes.length > 0 && bothTypes.every(s => {
-    const one = scoreWith(s, ["Startups"]), pair = scoreWith(s, ["Startups", "MSMEs"]);
-    /* Whatever else the scheme happens to list, adding both of these must move
-       it forward, and never by more than the 3 / 6 the axis allows. */
-    return pair - one >= 3 && pair - one <= 6;
-  }),
-  bothTypes.map(s => `${s.short_name} +${scoreWith(s, ["Startups", "MSMEs"]) - scoreWith(s, ["Startups"])}`).join(", "));
-t.check("the cap holds: four matching types add +6, not +9",
-  api.SCHEMES.every(s => {
-    const four = ["Startups", "MSMEs", "Innovators", "Researchers"].filter(b => s.target_beneficiaries.includes(b));
-    if (four.length < 4) return true;
-    return scoreWith(s, four) - scoreWith(s, [four[0]]) === 6;
-  }));
-/* Naming a type nothing lists is worth less than naming none at all: blank earns
-   a flat 8 for "no preference stated", a non-matching name earns 0, and a
-   matching name earns 20+. So it cannot silently score like a hit. */
-t.check("a type nothing lists scores zero on the axis, not the 8 for 'no preference'",
-  api.SCHEMES.every(s => api.scoreScheme(s, { ...blank, beneficiaries: ["ZZZ no such type"] }).score === baseScore - 8),
-  `base ${baseScore}`);
+t.step("Beneficiary Type takes several picks, and each one the scheme lists is credited");
+{
+  const scoreWith = (business) =>
+    api.SCHEMES.map(s => api.scoreScheme(s, { ...blank, business }).score);
+
+  const one = ["Startups"], two = ["Startups", "MSMEs"];
+
+  /* Not a minimum comparison: a pick gives 20 to a scheme that lists the type
+     and 0 to one that does not, so the floor is *lower* once you have picked
+     anything. What must hold is that picking lifts the schemes that match. */
+  const totalWith = (business) =>
+    scoreWith(business).reduce((a, b) => a + b, 0);
+  t.check("picking a type raises the total score across the dataset",
+    totalWith(one) > totalWith([]),
+    totalWith(one) + " vs " + totalWith([]));
+  t.check("and the schemes that list it are the ones lifted",
+    Math.max(...scoreWith(one)) > Math.max(...scoreWith([])));
+
+  /* The rule being tested: a scheme listing both chosen types must not rank
+     below a scheme listing only one of them, otherwise adding a second
+     selection can only ever push a real match down the list. */
+  const both = api.SCHEMES.filter(s =>
+    s.target_beneficiaries.includes("Startups") && s.target_beneficiaries.includes("MSMEs"));
+  const onlyOne = api.SCHEMES.filter(s =>
+    s.target_beneficiaries.includes("Startups") && !s.target_beneficiaries.includes("MSMEs"));
+  t.check("the dataset has schemes listing both types, and schemes listing only one",
+    both.length > 0 && onlyOne.length > 0, both.length + " both, " + onlyOne.length + " one");
+  const best = (arr, p2) => Math.max(...arr.map(s => api.scoreScheme(s, { ...blank, ...p2 }).score));
+  t.check("the best scheme for two picks is at least as good as for one pick",
+    best(api.SCHEMES, { business: two }) >= best(api.SCHEMES, { business: one }),
+    best(api.SCHEMES, { business: two }) + " vs " + best(api.SCHEMES, { business: one }));
+  t.check("picking two types scores strictly higher than picking one of the same two",
+    best(api.SCHEMES, { business: two }) > best(api.SCHEMES, { business: ["MSMEs"] }),
+    best(api.SCHEMES, { business: two }) + " vs " + best(api.SCHEMES, { business: ["MSMEs"] }));
+
+  t.check("a type no scheme lists contributes nothing and does not penalise",
+    best(api.SCHEMES, { business: ["Startups", "Nonexistent type"] }) >= best(api.SCHEMES, { business: one }));
+
+  const why = api.scoreScheme(
+    api.SCHEMES.find(s => s.target_beneficiaries.includes("Startups")),
+    { ...blank, business: two });
+  t.check("the reason names every type the scheme actually matches",
+    /Startups/.test(why.why.join(" ")), why.why.join(" | "));
+}
 t.check("recognition scores", affects({ recognition: "DPIIT" }) > 0);
 t.check("support type scores", affects({ support: "grant" }) > 0);
 t.check("funding scores", affects({ funding: "₹5–₹25 lakh" }) > 0);

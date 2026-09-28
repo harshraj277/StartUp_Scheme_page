@@ -160,10 +160,6 @@ let currentMode = "browse"; // "browse" | "match" | "saved"
 let currentResults = SCHEMES.slice();
 let quickFilterKey = "";
 let eligSectors = new Set();    // sectors selected in the "Find My Schemes" form
-let eligBeneficiaries = new Set();  /* beneficiary types: multi-select, because a
-   scheme usually lists several (mean 2.54 per record) and a founder can be more
-   than one of them. Single-select here was forcing a real applicant to pick the
-   label that happened to reach the most schemes and drop the other. */
 let eligProfile = null;
 let currentPage = 1;           // 1-based; results are paged, not appended
 let emptyHint = "";
@@ -181,6 +177,15 @@ function uniqueValues(key,isArray){
   });
   return [...c.entries()].sort((a,b)=>b[1]-a[1]);
 }
+/* A <select multiple> reports its selection through each option's .selected, and
+   .value only ever gives the first one. Reading the options is the only way to
+   get all of them, and it is the same call for a single select, so there is one
+   reader rather than two that could disagree. */
+function selectedValues(el){
+  if(!el || !el.options) return [];
+  return [...el.options].filter(o=>o.selected).map(o=>o.value);
+}
+
 function fillSelect(id, entries, {sortAlpha=false}={}){
   const el=document.getElementById(id);
   if(!el) return;
@@ -220,11 +225,18 @@ function initControls(){
   ALL_SECTORS = sectorEntries.map(e=>e[0]);
   ALL_BENEFICIARIES = beneficiaryEntries.map(e=>e[0]);
 
-  /* Business Stage stays a single-value <select>: a startup is at one stage, so
-     a second option would be a contradiction rather than a wider match. */
+  /* Alphabetical, like the advanced filters, and each option carries how many
+     schemes reach it. Beneficiary has 76 near-duplicate values across 59
+     schemes, so "Pilot (1)" has to be visibly different from "Startups (16)". */
   fillSelect("stage", stageEntries, {sortAlpha:true});
+  fillSelect("business", beneficiaryEntries, {sortAlpha:true});
   fillSelect("fMinistry", ministryEntries, {sortAlpha:true});
   fillSelect("fType", typeEntries, {sortAlpha:true});
+
+  /* Beneficiary Type is a multi-select, so the pick is only visible as a
+     highlight that scrolls away. Echo it in words, and keep that in step. */
+  document.getElementById("business").addEventListener("change", syncBusinessPicks);
+  syncBusinessPicks();
 
   /* Government Level used to be a filter here. Every record in the dataset is
      Central-government, so it could never remove anything — say so instead of
@@ -244,21 +256,13 @@ function initControls(){
 
   /* ALL sectors are offered (was: top 14, which hid 9 schemes entirely), but the
      list is collapsed by default — see applySectorChips(). */
-  /* Both chip fields are built the same way. The count is on every chip because
-     56 of the 76 beneficiary values reach exactly one scheme, and without a count
-     "Biotech startups indirectly (1)" looks like "Startups (16)". */
-  const chipHtml = (entries, field, fn) => entries.map(([v,c])=>
-    `<button class="chip" type="button" data-${field}="${esc(v)}" data-count="${c}" onclick="${fn}('${escJs(v)}')">${esc(v)} <span class="dash-mini" style="display:inline">(${c})</span></button>`).join("");
-  document.getElementById("sectorChips").innerHTML = chipHtml(sectorEntries, "sector", "toggleEligSector");
-  document.getElementById("beneficiaryChips").innerHTML = chipHtml(beneficiaryEntries, "beneficiary", "toggleEligBeneficiary");
+  const chipsEl=document.getElementById("sectorChips");
+  chipsEl.innerHTML = sectorEntries.map(([v,c])=>
+    `<button class="chip" type="button" data-sector="${esc(v)}" data-count="${c}" onclick="toggleEligSector('${escJs(v)}')">${esc(v)} <span class="dash-mini" style="display:inline">(${c})</span></button>`).join("");
   document.getElementById("sectorToggleBtn").addEventListener("click", toggleSectorList);
-  document.getElementById("beneficiaryToggleBtn").addEventListener("click", toggleBeneficiaryList);
   document.getElementById("sectorPickerBtn").addEventListener("click", toggleSectorPanel);
-  document.getElementById("beneficiaryPickerBtn").addEventListener("click", toggleBeneficiaryPanel);
   applySectorChips();
   syncSectorPanel();
-  applyBeneficiaryChips();
-  syncBeneficiaryPanel();
 
   /* Be explicit about how much of the dataset a reference field can actually see. */
   const fundEl=document.getElementById("fundCoverage");
@@ -338,146 +342,97 @@ document.addEventListener("keydown",function(e){
   if(e.key!=="Escape") return;
   if(document.getElementById("modalBackdrop").classList.contains("show")) closeModal();
   else if(isMobileNavOpen()) closeMobileNav();
-  else if(chipState.sector.open) closeSectorPanel();
-  else if(chipState.beneficiary.open) closeBeneficiaryPanel();
-});
-/* A chip panel left open over the rest of the form is a dead overlay the user
-   has to guess how to dismiss. Clicking anywhere else closes it. */
-document.addEventListener("click",function(e){
-  const hit=e.target.closest;
-  if(!hit) return;
-  ["sector","beneficiary"].forEach(f=>{
-    if(!chipState[f].open) return;
-    if(hit(".select-like") && hit(".select-like").getAttribute("aria-controls")===f+"Panel") return;
-    if(hit("#"+f+"Panel")) return;
-    closeChipPanel(f);
-  });
+  else if(sectorPanelOpen) closeSectorPanel();
 });
 function toggleFilters(){
   const collapsed = document.getElementById("filtersPanel").classList.toggle("collapsed");
   document.getElementById("filtersToggleBtn").setAttribute("aria-expanded", (!collapsed).toString());
 }
 
-/* ---------- eligibility finder chip fields ----------
-   Two multi-select fields share one implementation: Industry / Sector and
-   Business / Beneficiary Type. One control with two instances of it, because two
-   hand-written copies of the same widget is how they drift apart.
-
-   Each collapses to the values that reach more than one scheme and keeps the
-   long tail behind a "Show all" toggle: 61 of 83 sectors reach exactly one
-   scheme, and 56 of 76 beneficiary values do. Nothing is unreachable — the
-   toggle reveals everything, an explicit search always shows its matches, and a
-   selected value is never hidden, so you can always deselect what you picked. */
-const CHIP_FIELDS = {
-  sector:      { set: eligSectors,      min: 2, noun: "sector",
-                 label: "sectors", placeholder: "Select sectors…",
-                 total: () => ALL_SECTORS.length },
-  beneficiary: { set: eligBeneficiaries, min: 2, noun: "beneficiary type",
-                 label: "beneficiary types", placeholder: "Select beneficiary types…",
-                 total: () => ALL_BENEFICIARIES.length },
-};
-const chipState = { sector: { expanded: false, open: false }, beneficiary: { expanded: false, open: false } };
-
-function applyChips(field){
-  const f=CHIP_FIELDS[field], st=chipState[field];
-  const filterEl=document.getElementById(field+"Filter");
+/* ---------- eligibility finder chips ---------- */
+/* 61 of the 83 sectors reach exactly one scheme each, so the full list is a wall
+   of near-duplicates. Collapse to the sectors that actually reach something and
+   keep the long tail behind a toggle — nothing becomes unreachable, and a
+   selected sector is never allowed to disappear. */
+let sectorListExpanded = false;
+const SECTOR_MIN_COUNT = 2;   /* a sector is listed by default if it reaches >= 2 schemes */
+function applySectorChips(){
+  const filterEl=document.getElementById("sectorFilter");
   const raw=filterEl?filterEl.value:"";
   const q=normText(raw);
-  const showAll = st.expanded || !!q;   /* an explicit search always shows its matches */
+  const showAll = sectorListExpanded || !!q;   /* an explicit search always shows its matches */
   let shown=0, matching=0, singletons=0;
-  document.querySelectorAll("#"+field+"Chips .chip").forEach(c=>{
-    const name=c.dataset[field];
+  document.querySelectorAll("#sectorChips .chip").forEach(c=>{
+    const name=c.dataset.sector;
     const n=parseInt(c.dataset.count,10)||0;
-    if(n<f.min) singletons++;
+    if(n<2) singletons++;
     const matches=!q || normText(name).includes(q);
     if(matches) matching++;
-    const keep = f.set.has(name);       /* never hide something you can deselect */
-    c.hidden = !(matches && (showAll || keep || n>=f.min));
+    const keep = eligSectors.has(name);       /* never hide something you can deselect */
+    c.hidden = !(matches && (showAll || keep || n>=SECTOR_MIN_COUNT));
     if(!c.hidden) shown++;
   });
-  const total=f.total();
-  const countEl=document.getElementById(field+"ChipsCount");
+  const total=ALL_SECTORS.length;
+  const countEl=document.getElementById("sectorChipsCount");
   if(countEl){
-    const plural = `${total} ${f.label}`;
     countEl.textContent = q
-      ? `${matching} of ${plural} match “${raw.trim()}”`
-      : `Showing ${shown} of ${plural}` + (showAll
+      ? `${matching} of ${total} sectors match “${raw.trim()}”`
+      : `Showing ${shown} of ${total} sectors` + (showAll
           ? ` · ${singletons} of them reach a single scheme each`
           : ` · the ${total - shown} hidden ones each reach just one scheme`);
   }
-  const btn=document.getElementById(field+"ToggleBtn");
+  const btn=document.getElementById("sectorToggleBtn");
   if(btn){
-    btn.textContent = st.expanded ? "Show fewer ▴" : `Show all ${total} ▾`;
-    btn.setAttribute("aria-expanded", String(st.expanded));
+    btn.textContent = sectorListExpanded ? "Show fewer ▴" : `Show all ${total} ▾`;
+    btn.setAttribute("aria-expanded", String(sectorListExpanded));
     btn.hidden = !!q;                          /* searching already shows everything that matches */
   }
-  const box=document.getElementById(field+"Chips");
+  const box=document.getElementById("sectorChips");
   if(box) box.setAttribute("data-shown", String(shown));
 }
-function toggleChipList(field){ chipState[field].expanded=!chipState[field].expanded; applyChips(field); }
-
-/* The chip field opens and closes like the State / UT dropdown, so the form
-   stays scannable; the closed control reports what is already selected. */
-function syncChipPickerLabel(field){
-  const el=document.getElementById(field+"PickerLabel");
+function toggleSectorList(){
+  sectorListExpanded=!sectorListExpanded;
+  applySectorChips();
+}
+/* The sector field opens and closes like the State / UT dropdown above it, so the
+   form stays scannable; the closed control reports what is already selected. */
+let sectorPanelOpen = false;
+function syncSectorPickerLabel(){
+  const el=document.getElementById("sectorPickerLabel");
   if(!el) return;
-  const names=[...CHIP_FIELDS[field].set];
-  el.textContent = names.length===0 ? CHIP_FIELDS[field].placeholder
+  const names=[...eligSectors];
+  el.textContent = names.length===0 ? "Select sectors…"
     : names.length===1 ? names[0]
     : `${names[0]} +${names.length-1} more`;
-  const btn=document.getElementById(field+"PickerBtn");
+  const btn=document.getElementById("sectorPickerBtn");
   if(btn) btn.classList.toggle("has-value", names.length>0);
 }
-function syncChipPanel(field){
-  const st=chipState[field];
-  const panel=document.getElementById(field+"Panel");
-  if(panel) panel.hidden=!st.open;
-  const btn=document.getElementById(field+"PickerBtn");
+function syncSectorPanel(){
+  const panel=document.getElementById("sectorPanel");
+  if(panel) panel.hidden=!sectorPanelOpen;
+  const btn=document.getElementById("sectorPickerBtn");
   if(btn){
-    btn.setAttribute("aria-expanded", String(st.open));
-    btn.classList.toggle("open", st.open);
+    btn.setAttribute("aria-expanded", String(sectorPanelOpen));
+    btn.classList.toggle("open", sectorPanelOpen);
   }
-  syncChipPickerLabel(field);
+  syncSectorPickerLabel();
 }
-function toggleChipPanel(field){
-  chipState[field].open=!chipState[field].open;
-  syncChipPanel(field);
-  if(chipState[field].open) applyChips(field);
+function toggleSectorPanel(){
+  sectorPanelOpen=!sectorPanelOpen;
+  syncSectorPanel();
+  if(sectorPanelOpen) applySectorChips();
 }
-function closeChipPanel(field){
-  if(!chipState[field].open) return;
-  chipState[field].open=false;
-  syncChipPanel(field);
+function closeSectorPanel(){
+  if(!sectorPanelOpen) return;
+  sectorPanelOpen=false;
+  syncSectorPanel();
 }
-function toggleEligChip(field, v){
-  const set=CHIP_FIELDS[field].set;
-  if(set.has(v)) set.delete(v); else set.add(v);
-  document.querySelectorAll("#"+field+"Chips .chip").forEach(c=>c.classList.toggle("active",set.has(c.dataset[field])));
-  applyChips(field);
-  syncChipPickerLabel(field);
+function toggleEligSector(v){
+  if(eligSectors.has(v)) eligSectors.delete(v); else eligSectors.add(v);
+  document.querySelectorAll("#sectorChips .chip").forEach(c=>c.classList.toggle("active",eligSectors.has(c.dataset.sector)));
+  applySectorChips();
+  syncSectorPickerLabel();
 }
-/* Names kept as named functions: the markup calls them, and a name that says
-   what it does is easier to follow in index.html than a field string. */
-function applySectorChips(){ applyChips("sector"); }
-function toggleSectorList(){ toggleChipList("sector"); }
-function toggleSectorPanel(){ toggleChipPanel("sector"); }
-function closeSectorPanel(){ closeChipPanel("sector"); }
-function syncSectorPanel(){ syncChipPanel("sector"); }
-function syncSectorPickerLabel(){ syncChipPickerLabel("sector"); }
-function toggleEligSector(v){ toggleEligChip("sector", v); }
-function filterSectorChips(){ applyChips("sector"); }
-function applyBeneficiaryChips(){ applyChips("beneficiary"); }
-function toggleBeneficiaryList(){ toggleChipList("beneficiary"); }
-function toggleBeneficiaryPanel(){ toggleChipPanel("beneficiary"); }
-function closeBeneficiaryPanel(){ closeChipPanel("beneficiary"); }
-function syncBeneficiaryPanel(){ syncChipPanel("beneficiary"); }
-function toggleEligBeneficiary(v){ toggleEligChip("beneficiary", v); }
-function filterBeneficiaryChips(){ applyChips("beneficiary"); }
-/* setFieldHint() and updateFieldHints() used to sit here, warning when a
-   free-text stage or beneficiary value was not in the dataset. They were
-   removed when Business Stage and Beneficiary Type became dropdowns; the
-   beneficiary field is a chip field again, but still only ever holds dataset
-   values, so there is still nothing for a hint to warn about. */
 function onFilterChange(){currentMode="browse"; currentPage=1; renderResults();}
 function onSearchInput(){currentMode="browse"; currentPage=1; renderResults();}
 function resetToBrowse(){
@@ -588,15 +543,16 @@ function scoreScheme(s,p){
     }
   } else score+=10;
 
-  /* Beneficiary type — 20, scaled the way sectors scale: a scheme that lists
-     several of your types is a closer fit than one that lists one. Capped at
-     +6 so a scheme that lists four of the same thing cannot outrank a
-     sector-specific scheme on the beneficiary axis alone. */
-  if(p.beneficiaries.length){
-    const specific=p.beneficiaries.filter(b=>s.target_beneficiaries.includes(b));
-    if(specific.length){
-      score+=20+Math.min(6,(specific.length-1)*3);
-      why.push(`Open to beneficiaries like <strong>${specific.map(esc).join(", ")}</strong>`);
+  /* Beneficiary type — 20 */
+  if(p.business.length){
+    const hit=p.business.filter(b=>s.target_beneficiaries.some(x=>closeEnough(b,x)));
+    if(hit.length){
+      /* Same shape as the sector field above: a match is worth the points, and
+         each additional selected type the scheme actually lists is worth a few
+         more, so picking two types you both are does not rank a scheme below one
+         that satisfies a single type. */
+      score+=20+Math.min(6,(hit.length-1)*3);
+      why.push(`Open to beneficiaries like <strong>${hit.map(esc).join(", ")}</strong>`);
     }
   } else score+=8;
 
@@ -650,36 +606,32 @@ function scoreScheme(s,p){
 
 function findSchemes(){
   const stageRaw=document.getElementById("stage").value.trim();
-  const beneficiaries=[...eligBeneficiaries];
+  const bizValues=selectedValues(document.getElementById("business"));
   const recognition=document.getElementById("recognition").value;
   const access=document.getElementById("access").value;
   const support=document.getElementById("support").value;
   const sectors=[...eligSectors];
 
-  if(!stageRaw && !beneficiaries.length && !recognition && !access && !support && !sectors.length){
+  if(!stageRaw && !bizValues.length && !recognition && !access && !support && !sectors.length){
     currentMode="match"; eligProfile=null; emptyHint="";
     document.getElementById("resultsHeading").textContent="Find schemes for my startup";
     document.getElementById("resultCount").textContent="No eligibility inputs selected yet";
     document.getElementById("modeBanner").innerHTML="";
     currentPage=1;
-    document.getElementById("results").innerHTML=`<div class="empty">📋 <strong>Almost there.</strong><br>Choose at least one of <b>Business Stage</b>, a <b>Business / Beneficiary Type</b>, an <b>Industry / Sector</b>, <b>DPIIT / Udyam Recognition</b>, <b>Incubation / Access</b> or <b>Support Type</b> above, then click <b>Find Matching Schemes</b> again.<br><span class="dash-mini">Fields marked (reference only) are optional context that slightly refine the ranking.</span><br><button class="btn btn-outline" style="margin-top:12px" onclick="resetToBrowse()">Show all schemes</button></div>`;
+    document.getElementById("results").innerHTML=`<div class="empty">📋 <strong>Almost there.</strong><br>Choose at least one of <b>Business Stage</b>, <b>Business / Beneficiary Type</b>, an <b>Industry / Sector</b>, <b>DPIIT / Udyam Recognition</b>, <b>Incubation / Access</b> or <b>Support Type</b> above, then click <b>Find Matching Schemes</b> again.<br><span class="dash-mini">Fields marked (reference only) are optional context that slightly refine the ranking.</span><br><button class="btn btn-outline" style="margin-top:12px" onclick="resetToBrowse()">Show all schemes</button></div>`;
     document.getElementById("paginationWrap").style.display="none";
     document.getElementById("pagingInfo").textContent="";
     scrollToId("schemes");
     return;
   }
 
-  /* Only the stage needs resolving: it is a <select>, so its value is already a
-     dataset string, and resolveAgainst() is kept for a restored profile. The
-     beneficiary types come from chips, which can only ever hold dataset values,
-     so they need no resolution step. */
   const stageRes=resolveAgainst(stageRaw, ALL_STAGES);
   const state=document.getElementById("state").value;
 
   eligProfile = {
     name: document.getElementById("startupName").value.trim(),
     stage: stageRaw, stageValue: stageRes.value || stageRaw,
-    beneficiaries: beneficiaries,
+    business: bizValues,
     sectors: sectors,
     recognition: recognition,
     state: state,
@@ -702,10 +654,9 @@ function findSchemes(){
   if(!scored.length){
     const tips=[];
     /* Two tips that used to live here — "…is not a dataset stage/beneficiary
-       type" — are gone with the free-text inputs. Neither control can hold a
-       value that is not in the dataset, so they could never fire. */
+       type" — are gone with the free-text inputs. A <select> cannot hold a value
+       that is not in the dataset, so they could never fire. */
     if(sectors.length) tips.push(`No scheme in the dataset is tagged for <b>${sectors.map(esc).join(", ")}</b>.`);
-    if(beneficiaries.length) tips.push(`No scheme in the dataset lists <b>${beneficiaries.map(esc).join(", ")}</b> as a beneficiary type.`);
     emptyHint=tips.length? tips.map(t=>"• "+t).join("<br>")+"<br><br>" : "";
   }
 
@@ -719,22 +670,38 @@ function findSchemes(){
 }
 function resetForm(){
   document.querySelectorAll("#find input").forEach(e=>e.value="");
-  document.querySelectorAll("#find select").forEach(e=>e.selectedIndex=0);
-  /* Explicit: both chip lists are filtered by their own filter box, so clearing
-     the form has to clear those too or the list comes back narrowed. */
-  document.getElementById("sectorFilter").value="";
-  document.getElementById("beneficiaryFilter").value="";
+  /* selectedIndex = 0 is wrong for a <select multiple>: there it selects the
+     first option and leaves every other selection in place, so "Reset" would
+     have kept the picks and added one. -1 deselects all, which is what a reset
+     of a multi-select has to mean. */
+  document.querySelectorAll("#find select").forEach(e=>{ e.selectedIndex = e.multiple ? -1 : 0; });
+  document.getElementById("sectorFilter").value="";   /* explicit: the chip list depends on it */
   eligSectors.clear();
-  eligBeneficiaries.clear();
-  chipState.sector.expanded=false;
-  chipState.beneficiary.expanded=false;
-  chipState.sector.open=false;
-  chipState.beneficiary.open=false;
+  sectorListExpanded=false;
+  sectorPanelOpen=false;
+  syncBusinessPicks();
   applySectorChips();
   syncSectorPanel();
-  applyBeneficiaryChips();
-  syncBeneficiaryPanel();
   resetToBrowse();
+}
+
+/* A multi-select's selected rows scroll out of sight, and picking several needs
+   Ctrl / Cmd-click, so the state is echoed in words under the control — and a
+   Clear button, because deselecting one of five otherwise means finding it
+   again in a list of 76. */
+function syncBusinessPicks(){
+  const note=document.getElementById("businessPicked");
+  if(!note) return;
+  const picks=selectedValues(document.getElementById("business"));
+  note.innerHTML = picks.length
+    ? `<strong>${picks.length} selected</strong>: ${picks.map(esc).join(", ")} ` +
+      `<button type="button" class="link-btn" onclick="clearBusinessPicks()">Clear</button>`
+    : `Nothing selected &mdash; Ctrl / Cmd-click to pick more than one.`;
+}
+function clearBusinessPicks(){
+  const el=document.getElementById("business");
+  if(el) el.selectedIndex=-1;
+  syncBusinessPicks();
 }
 
 /* ---------- results rendering ---------- */

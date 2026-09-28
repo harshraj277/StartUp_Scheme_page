@@ -100,8 +100,21 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .field label{display:block;font-weight:800;font-size:.88rem;margin-bottom:7px}
 .field input,.field select{width:100%;border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink);outline:none}
 .field input:focus,.field select:focus{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
-/* Both multi-select fields open and close like the State / UT select, so they
-   borrow the exact same box and then drop a caret on the right. */
+/* A multi-select is a list box, not a one-line field. The 12px padding of the
+   shared rule is a one-line field's padding: on a 7-row list it wastes a third
+   of the box, so it is tightened here and the rows are given room to breathe. */
+.field select[multiple]{padding:5px;min-height:196px;cursor:pointer}
+.field select[multiple] option{padding:5px 8px;border-radius:6px}
+.field select[multiple] option:checked{background:#e8f2ff;font-weight:750}
+/* The state of a multi-select is a highlight that scrolls out of view, and
+   Ctrl / Cmd-click is not guessable, so the picks are spelled out underneath
+   with a way to drop all of them. */
+.picked-note{margin:9px 0 0;font-size:.8rem;line-height:1.5;color:var(--muted)}
+.link-btn{background:none;border:0;padding:0;color:#26659d;font:inherit;font-weight:800;
+  text-decoration:underline;cursor:pointer}
+.link-btn:hover{color:#123a68}
+/* The sector field opens and closes like the State / UT select, so it borrows
+   the exact same box and then drops a caret on the right. */
 .select-like{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;
   border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink)}
 .select-like:hover{border-color:#8ba8c5}
@@ -109,8 +122,8 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .select-like.has-value{font-weight:750}
 .select-caret{flex:none;color:var(--muted);font-size:.8rem;transition:transform .15s}
 .select-like.open .select-caret{transform:rotate(180deg)}
-.chip-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
-.chip-panel[hidden]{display:none}
+.sector-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
+.sector-panel[hidden]{display:none}
 .full{grid-column:1/-1}.chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#f7f9fc;border-radius:999px;padding:8px 12px;font-size:.82rem;font-weight:750}
 .chip.active{background:#e8f2ff;border-color:#8fb5dc;color:var(--navy)}
@@ -306,9 +319,7 @@ footer p{max-width:62ch}
 .filter-field label{display:block;font-size:.72rem;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
 .filter-field select{width:100%;border:1px solid var(--line);padding:10px 11px;border-radius:10px;background:#fbfdff;font-size:.83rem}
 .chip-scroll{display:flex;flex-wrap:wrap;gap:7px;max-height:112px;overflow:auto;padding:2px}
-/* Both chip lists get the same capped height. 76 beneficiary values and 83
-   sectors cannot be shown at once without the page growing to fit them. */
-#sectorChips,#beneficiaryChips{max-height:136px}
+#sectorChips{max-height:136px}
 .filter-note{margin:14px 0 0}
 .info-banner{background:#eef4fb;border:1px solid #d9e5f3;border-radius:12px;padding:12px 16px;font-size:.82rem;color:#375073;margin-bottom:16px}
 .badge-status{font-size:.64rem;padding:4px 9px;border-radius:999px;font-weight:900;display:inline-block}
