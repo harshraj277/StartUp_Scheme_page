@@ -67,18 +67,95 @@ header{position:sticky;top:0;z-index:50;
 .btn:disabled:hover{transform:none}
 .menu{display:none;margin-left:auto;font-size:1.4rem;background:none;border:0;color:#fff}
 
-.hero{padding:76px 0 55px;background:
- radial-gradient(circle at 82% 20%,rgba(216,165,44,.16),transparent 25%),
- linear-gradient(135deg,#f8fbff 0%,#eef4fb 100%)}
-.hero-grid{display:grid;grid-template-columns:1fr;gap:0;align-items:center}
-.badge{display:inline-flex;align-items:center;gap:8px;background:#e9f1fa;color:var(--navy);border:1px solid #d9e5f3;padding:7px 12px;border-radius:999px;font-size:.82rem;font-weight:800}
-h1{font-size:clamp(2.4rem,5vw,4.7rem);line-height:1.02;letter-spacing:-.055em;margin:18px 0}
-.hero p{font-size:1.12rem;color:#52647c;max-width:690px}
-.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin:26px 0}
-.trust{display:flex;gap:18px;flex-wrap:wrap;color:#52647c;font-size:.88rem;font-weight:650}
+/* ---------- hero ---------- */
+/* Navy, with a gold bloom behind the mark. The dotted wash and the two gold rings
+   are decoration only: they sit on ::before/::after at z-index 0 behind the
+   content, and the slow spin stops for anyone who asked for less motion. */
+.hero{position:relative;overflow:hidden;color:#fff;padding:78px 0 60px;background:
+ radial-gradient(900px 470px at 84% -6%,rgba(216,165,44,.30),transparent 62%),
+ radial-gradient(620px 420px at 8% 108%,rgba(34,94,158,.30),transparent 66%),
+ linear-gradient(168deg,#14396a 0%,#0a2a4f 52%,#061a33 100%)}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+ background-image:radial-gradient(rgba(255,255,255,.10) 1px,transparent 1px);background-size:26px 26px;
+ -webkit-mask-image:linear-gradient(180deg,#000,transparent 68%);mask-image:linear-gradient(180deg,#000,transparent 68%)}
+.hero::after{content:"";position:absolute;right:-150px;top:-120px;width:540px;height:540px;border-radius:50%;
+ border:2px solid rgba(216,165,44,.45);pointer-events:none;animation:ring-spin 96s linear infinite}
+.hero .container{position:relative;z-index:1}
+@keyframes ring-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.hero::after{animation:none}}
+
+.hero-grid{display:grid;grid-template-columns:1.32fr .68fr;gap:2.6rem;align-items:center}
+h1{font-size:clamp(2.15rem,4.6vw,3.5rem);line-height:1.06;letter-spacing:-.03em;margin:14px 0 0}
+.hero h1{max-width:19ch}
+.hero .hi{font-size:1.12rem;font-weight:700;color:var(--gold-soft);margin:14px 0 0;letter-spacing:.005em}
+.hero p.lead{font-size:1.06rem;line-height:1.6;color:#cfdcef;max-width:56ch;margin:14px 0 0}
+/* A pale pill on navy is the wrong weight — this one is outlined in the logo's
+   gold so the eyebrow reads as part of the crest rather than a stray chip. */
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(216,165,44,.14);
+ color:var(--gold-soft);border:1px solid rgba(216,165,44,.42);padding:7px 13px;border-radius:999px;
+ font-size:.8rem;font-weight:800;letter-spacing:.02em}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0 20px}
+.btn-hero{background:var(--gold);color:#0b1c30;font-size:1.02rem;padding:13px 22px;min-height:50px;
+ box-shadow:0 8px 22px rgba(216,165,44,.34)}
+.btn-hero:hover{background:#e6bb55;transform:translateY(-1px);box-shadow:0 10px 26px rgba(216,165,44,.44)}
+/* The secondary is outlined, not filled: two solid buttons side by side compete,
+   and the gold one is the one we want clicked. */
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.34);color:#fff}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold-soft);background:rgba(216,165,44,.10)}
+.trust{display:flex;gap:10px 20px;flex-wrap:wrap;color:#a9bcd9;font-size:.86rem;font-weight:650}
 .trust span{display:flex;align-items:center;gap:6px}
+/* The mark sits inside a white disc rather than being cropped to a circle:
+   img/logo.webp is an opaque square WebP, so a border-radius on the image itself
+   would slice the artwork instead of framing it. */
+.hero-mark{justify-self:center;position:relative;width:clamp(190px,19vw,320px);aspect-ratio:1;
+ border-radius:50%;background:#fff;padding:9%;display:grid;place-items:center;
+ box-shadow:0 0 0 2px var(--gold),0 0 0 12px rgba(216,165,44,.18),0 26px 60px rgba(3,14,30,.45)}
+.hero-mark::after{content:"";position:absolute;inset:-30px;border-radius:50%;
+ border:1.5px dashed rgba(216,165,44,.5);animation:ring-spin 64s linear infinite reverse;pointer-events:none}
+.hero-mark img{width:100%;height:100%;object-fit:contain;display:block}
+@media(prefers-reduced-motion:reduce){.hero-mark::after{animation:none}}
+@media(max-width:920px){
+ .hero-grid{grid-template-columns:1fr;gap:2rem}
+ .hero h1{max-width:none}
+ .hero-mark{display:none}
+}
 
 section{padding:70px 0}
+
+/* ---------- alternating section bands ----------
+   Navy, white, navy, white down the page. The class is on each <section> rather
+   than done with :nth-of-type on purpose: the order here is a content decision,
+   and :nth-of-type would silently repaint every section below whenever one is
+   inserted or removed. The hero is navy too and is painted by .hero itself. */
+.band-light{background:#fff;color:var(--ink)}
+.band-navy{background:
+ radial-gradient(760px 400px at 90% 0%,rgba(216,165,44,.13),transparent 64%),
+ linear-gradient(172deg,#0e2f55 0%,#09264a 54%,#071e39 100%);color:#fff}
+/* Cards inside a navy band stay white, which is what makes the band read as a
+   band instead of as a dark page. Only the type on the band itself changes. */
+/* Scoped to the section heading, not to every h2/h3 on the band: the cards in a
+   navy band are white, and a blanket `h3` rule would have put the feature card's
+   heading at white-on-white. */
+.band-navy .section-head h2{color:#fff}
+/* A white card inside a navy band otherwise INHERITS the band's #fff text, which
+   is how the explore tile's <strong> went white on a white tile. Each card that
+   actually appears on a band has to set its own ink. */
+.band-navy .find-box,.band-navy .explore-tile,.band-navy .feature{color:var(--ink)}
+.band-navy .section-head p{color:#c3d3e9}
+.band-navy .eyebrow{color:var(--gold-soft)}
+.band-navy .disclaimer{color:#9db2d0}
+/* .ref-note is deliberately NOT recoloured here. It paints its own light fill, so
+   it keeps dark text on a light box even on a navy band — giving it the band's
+   light text would have put #9db2d0 on #f7fafc, which is unreadable. */
+/* A white card on a white section is only its 1px border, so the light bands
+   get a deeper edge and a real shadow to keep the grids reading as cards. */
+.band-light .step,.band-light .scheme-card,.band-light .stat-card,.band-light .feature,
+.band-light .category,.band-light .explore-tile,.band-light .searchbar,.band-light .filters-panel{
+ border-color:#d5e1ef;box-shadow:0 10px 28px rgba(9,38,74,.065)}
+.band-light .scheme-card:hover{border-color:#b9cde3}
+/* A blocked card tints itself warm to flag a missing prerequisite. That tint was
+   near-white, which on a white band erased the flag; it needs to survive. */
+.band-light .scheme-card.blocked{background:#fffaf2;border-color:#f0dcbb}
 .section-head{text-align:center;max-width:760px;margin:0 auto 34px}
 .eyebrow{text-transform:uppercase;letter-spacing:.13em;font-size:.75rem;color:#9b7318;font-weight:900}
 h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;margin:8px 0 12px}
@@ -91,8 +168,11 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .category{cursor:pointer;transition:.2s}.category:hover{transform:translateY(-3px);border-color:#c9d8e9}
 .category-icon{font-size:1.55rem}.category strong{display:block;margin-top:9px}.category span{font-size:.82rem;color:var(--muted)}
 
-.find{background:#09264a;color:#fff}
-.find .section-head p{color:#c5d2e1}
+/* The form section gets its navy from .band-navy like every other dark band, so
+   the gradient matches the hero and the two read as one system. It used to
+   carry a flat #09264a of its own, which sat next to the hero's gradient as a
+   visible seam. */
+.find{color:#fff}
 /* Capped because the form is two columns of inputs: at full width each field
    would be ~900px across, which is a worse problem than the gutter was. */
 .find-box{background:#fff;color:var(--ink);border-radius:24px;padding:28px;max-width:1000px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
@@ -360,7 +440,9 @@ footer p{max-width:62ch}
 .field-hint{display:block;margin-top:6px;font-size:.73rem;font-weight:650;color:var(--muted)}
 .field-hint.ok{color:var(--green)}
 .field-hint.warn{color:var(--amber)}
-.ref-note{margin:18px 0 0;font-size:.78rem;line-height:1.5;color:#7b8ba1;background:#f7fafc;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:11px 13px}
+/* #7b8ba1 was 3.31:1 on this box's own #f7fafc fill — under the 4.5:1 needed for
+   the .78rem text it holds. #5f7089 is 4.81:1 on the fill and 5.04:1 on white. */
+.ref-note{margin:18px 0 0;font-size:.78rem;line-height:1.5;color:#5f7089;background:#f7fafc;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:11px 13px}
 .ref-note strong{color:#4d5f77}
 .info-banner .dash-mini{display:block;margin-top:4px}
 /* Tall enough for the bar to wrap onto a second line in a short window —
@@ -377,7 +459,9 @@ body.has-compare-bar{padding-bottom:104px}
 }
 
 
-/* The h1 is up to 4.7rem, so the copy is width-capped rather than stretched
-   across the container — a line of headline text six words longer than anyone
-   reads. */
-.hero-copy{max-width:840px}
+/* The hero is a two-column grid, so this column is already narrower than the
+   container. The cap is a floor-guard for the one case the grid cannot cover —
+   a viewport wide enough to hold both columns but too short to wrap the
+   headline — where an uncapped copy column would run the paragraph out to the
+   full page width and give the eye a line far longer than it will read. */
+.hero-copy{min-width:0;max-width:840px}

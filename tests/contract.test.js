@@ -60,7 +60,14 @@ t.step("hero dataset-snapshot card removed, with no orphans left behind");
  [/\btwo-col\b/, html + css, "two-col hero layout (the card was the second column)"]].forEach(([re, hay, label]) => {
   t.check("removed: " + label, !re.test(hay));
 });
-t.check("the hero is one readable column, not a stretched full-width block", /\.hero-copy\{max-width:/.test(css));
+/* The hero is two columns on a wide screen — copy left, mark right — so "one
+   readable column" is no longer the goal. What still has to hold is that the
+   copy is width-capped, and that the grid collapses to one column rather than
+   leaving a 300px mark squeezed beside the text. */
+t.check("the hero copy is width-capped, so the headline cannot run the full page",
+  /\.hero-copy\{[^}]*max-width:840px/.test(css));
+t.check("and the copy column can shrink inside the grid instead of forcing it wide",
+  /\.hero-copy\{[^}]*min-width:0/.test(css));
 t.check("the last-verified date is not lost along with the card", /id="dashVerified"/.test(html) && /getElementById\("dashVerified"\)/.test(js));
 
 t.step("results are paged, not appended to");
@@ -332,8 +339,9 @@ t.check("the container runs full width, with only a small fluid gutter",
 t.check("the nav cannot wrap its labels",
   /\.navlinks a\{white-space:nowrap\}/.test(css));
 t.check("prose that would stretch is capped instead of running the full width",
-  /\.hero-copy\{max-width:840px\}/.test(css) &&
+  /\.hero-copy\{[^}]*max-width:840px/.test(css) &&
   /\.section-head\{[^}]*max-width:760px/.test(css) &&
+  /\.hero p\.lead\{[^}]*max-width:56ch/.test(css) &&
   /\.find-box\{[^}]*max-width:1000px/.test(css) &&
   /footer p\{max-width:62ch\}/.test(css) &&
   /\.compare-page \.ref-note\{max-width:900px\}/.test(css) &&
@@ -392,7 +400,7 @@ t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT"
     /<select id="stage"><option value="">Select business stage<\/option>/.test(html));
   t.check("both are populated from the dataset by the same helper the filters use",
     /fillSelect\("stage", stageEntries/.test(js) && /fillSelect\("business", beneficiaryEntries/.test(js));
-  t.check("nothing is hidden behind a toggle \u2014 the full list is in the control",
+  t.check("nothing is hidden behind a toggle — the full list is in the control",
     !/stageToggle|stageList|businessList/.test(js) && !/id="stageList"/.test(html));
   /* Every option states how many schemes reach it: beneficiary has 76
      near-duplicate values across 59 schemes, and without a count a label that
@@ -416,7 +424,7 @@ t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT"
   /* Against code(js), not js: the names survive in the comments explaining
      why the functions went away, and a check written to catch a live function
      must not trip over the note describing its removal. */
-  t.check("removed: setFieldHint / updateFieldHints \u2014 a select cannot hold a bad value",
+  t.check("removed: setFieldHint / updateFieldHints — a select cannot hold a bad value",
     !/setFieldHint|updateFieldHints/.test(code(js)));
   t.check("removed: the hint elements themselves", !/stageHint|businessHint/.test(html) && !/stageHint|businessHint/.test(js));
   t.check("removed: the empty-result tips about non-dataset values, which cannot fire",
@@ -634,17 +642,26 @@ t.step("the institution credit and the real logo files");
     /@media\(max-width:700px\)\{[\s\S]*?\.institution\{margin-left:0;width:100%\}/.test(css));
 }
 
-t.step("the hero emblem was removed, and left nothing behind");
+t.step("the old hero emblem is gone, and left nothing behind");
 {
-  /* Removed on request. These guard against the removal being half-done, which
-     is how dead CSS and orphaned rules get left in a stylesheet. */
-  t.check("no emblem markup in the hero",
+  /* The emblem was removed, then asked for back and rebuilt as .hero-mark — a
+     white disc framing the logo rather than a bare image. These guard the older
+     removal being fully clean, which is how dead CSS and orphaned `order` rules
+     get left behind in a stylesheet. */
+  t.check("no trace of the old emblem markup in the hero",
     !/hero-emblem/.test(html) && !/emblem-logo/.test(html));
-  t.check("no emblem CSS left in the stylesheet",
-    !/hero-emblem|emblem-logo/.test(css));
-  t.check("the hero is back to a single column — no orphaned two-column override",
-    !/hero-grid\{grid-template-columns:minmax/.test(css) &&
-    /\.hero-grid\{display:grid;grid-template-columns:1fr/.test(css));
+  t.check("no trace of the old emblem CSS in the stylesheet",
+    !/hero-emblem|emblem-logo/.test(code(css)));
+  /* The hero is two columns again by request, but on a deliberate track: a wide
+     copy column and a mark column, collapsing to one at 920px. The bug this
+     guards against is an orphaned override left behind, so both halves are
+     pinned — the two-column base, and the collapse query that must follow it. */
+  t.check("the hero grid is two columns on a wide screen, copy first",
+    /\.hero-grid\{display:grid;grid-template-columns:1\.32fr \.68fr/.test(css));
+  t.check("and it collapses to one column, hiding the mark, at a stated width",
+    /@media\(max-width:920px\)\{[\s\S]*?\.hero-grid\{grid-template-columns:1fr[\s\S]*?\.hero-mark\{display:none\}/.test(css));
+  t.check("the collapse query lands after the base rule, or it loses the tie",
+    css.indexOf("@media(max-width:920px)") > css.indexOf(".hero-grid{display:grid"));
   t.check("no orphaned `order` rules that existed only to place the emblem",
     !/\.hero-copy\{order:/.test(css) && !/\.hero-emblem\{[^}]*order:/.test(css));
   /* The navbar and footer logos are a separate request and must survive. */
@@ -653,6 +670,219 @@ t.step("the hero emblem was removed, and left nothing behind");
     /class="institution-logo" src="img\/institution\.webp"/.test(html));
   t.check("the hero still leads with the h1, with nothing above it",
     /<div class="container hero-grid">\s*<div class="hero-copy">\s*<span class="badge"/.test(html));
+}
+
+/* ---------- the hero and the alternating bands ----------
+   Both were restyled by request. A contrast regression here is invisible to the
+   engine, e2e and compare suites — none of them read a colour — so the pairs
+   that have to stay legible are pinned with computed ratios below. */
+t.step("the hero is navy with a gold call to action, and the logo comes back");
+{
+  t.check("the hero paints itself navy, over a gold bloom",
+    /\.hero\{[^}]*color:#fff/.test(css) && /\.hero\{[^}]*radial-gradient\([^)]*216,165,44/.test(css) &&
+    /\.hero\{[^}]*linear-gradient/.test(css));
+  /* The dotted wash and the gold ring are pseudo-elements. Without an explicit
+     z-index on the container they would paint over the headline. */
+  t.check("the decoration sits behind the content, not on top of it",
+    /\.hero \.container\{[^}]*z-index:1/.test(css) && /\.hero::after\{[^}]*pointer-events:none/.test(css) &&
+    /\.hero::before\{[^}]*pointer-events:none/.test(css));
+  t.check("the gold ring stops turning for anyone who asked for less motion",
+    /@media\(prefers-reduced-motion:reduce\)\{\.hero::after\{animation:none\}\}/.test(css) &&
+    /@media\(prefers-reduced-motion:reduce\)\{\.hero-mark::after\{animation:none\}\}/.test(css) &&
+    /@keyframes ring-spin\{/.test(css));
+  /* Two solid buttons side by side compete; only one of them is the one we want
+     clicked. */
+  t.check("the primary call to action is the logo's gold, and it is labelled as such",
+    /\.btn-hero\{[^}]*background:var\(--gold\)/.test(css) &&
+    /class="btn btn-hero" onclick="scrollToFind\(\)"/.test(html));
+  t.check("the secondary is outlined rather than a second solid button",
+    /\.btn-ghost\{[^}]*background:transparent/.test(css) &&
+    /class="btn btn-ghost" onclick="resetToBrowse\(\);scrollToId\('schemes'\)"/.test(html));
+  /* The Devanagari line echoes the bilingual wordmark already in the navbar. */
+  t.check("the Devanagari line is our own text, in the logo gold, marked up as Hindi",
+    /<p class="hi" lang="hi">/.test(html) && /\.hero \.hi\{[^}]*color:var\(--gold-soft\)/.test(css) &&
+    !/स्वास्थ्य/.test(html));
+  t.check("the eyebrow pill is outlined in gold, not a pale chip lost on navy",
+    /\.badge\{[^}]*rgba\(216,165,44,\.42\)/.test(css) && /\.badge\{[^}]*color:var\(--gold-soft\)/.test(css));
+  /* The mark is a white disc holding the logo, not the logo cropped to a circle:
+     img/logo.webp is an opaque square, so a radius on the image would slice the
+     artwork. */
+  t.check("the mark frames the logo in a white disc rather than cropping it",
+    /\.hero-mark\{[^}]*background:#fff/.test(css) && /\.hero-mark img\{[^}]*object-fit:contain/.test(css) &&
+    !/\.hero-mark img\{[^}]*border-radius/.test(css));
+  t.check("it is the supplied logo, sized so it cannot shift the layout",
+    /<div class="hero-mark">\s*<img src="img\/logo\.webp" width="300" height="300" alt="" aria-hidden="true">/.test(html));
+  t.check("and decorative, because the site's name is in the navbar right above it",
+    /<div class="hero-mark">[\s\S]*?alt="" aria-hidden="true"/.test(html));
+  t.check("the h1 is still the first thing in the hero copy",
+    /<div class="hero-copy">\s*<span class="badge"[\s\S]*?<h1>/.test(html));
+}
+
+t.step("sections alternate navy and white down the page");
+{
+  const sections = [...html.matchAll(/<section\b([^>]*)>/g)].map(m => m[1]);
+  /* The band token inside the class list, not the whole class string: the form
+     section is "band-navy find", and comparing class strings would miss it. */
+  const band = sec => (/(band-(?:navy|light))/.exec(sec || "") || [null, ""])[1];
+  t.check("every section except the hero declares its band explicitly",
+    sections.filter(sec => !/class="hero"/.test(sec)).every(sec => band(sec)),
+    sections.filter(sec => !/class="hero"/.test(sec) && !band(sec)).join(" | "));
+  /* The order is a content decision, so it is written out. :nth-of-type would
+     repaint everything below whenever a section was inserted or removed. */
+  t.check("the bands alternate, starting white and ending navy after the hero",
+    sections.map(band).join(" ") === " band-light band-navy band-light band-navy band-light band-navy",
+    sections.map(band).join(" > "));
+  /* code(css), not css: the note explaining why nth-of-type is avoided names it,
+     and a check written to catch a live use must not trip over the note. */
+  t.check("no section is coloured by :nth-of-type or :nth-child",
+    !/:nth-of-type|:nth-child/.test(code(css)));
+  t.check("the hero is painted by .hero, so it does not need a band class",
+    /class="hero"/.test(html) && band(sections[0]) === "" &&
+    /\.hero\{[^}]*linear-gradient/.test(css));
+  /* The form section used to carry a flat #09264a of its own, which sat beside
+     the hero's gradient as a visible seam. */
+  t.check("the form section takes its navy from the shared band, with no second background",
+    /class="band-navy find"/.test(html) && /\.find\{[^}]*color:#fff\}/.test(css) &&
+    !/\.find\{[^}]*background/.test(css));
+  t.check("both bands are defined, and neither is a shorthand of the other",
+    /\.band-light\{background:#fff/.test(css) && /\.band-navy\{[^}]*linear-gradient/.test(css));
+  /* Type on a navy band has to be light, and the eyebrow's dark gold is
+     invisible there. */
+  t.check("headings, body copy and the eyebrow are recoloured for the navy bands",
+    /\.band-navy \.section-head h2\{color:#fff\}/.test(css) &&
+    /\.band-navy \.section-head p\{color:#c3d3e9\}/.test(css) &&
+    /\.band-navy \.eyebrow\{color:var\(--gold-soft\)\}/.test(css));
+  /* Cards stay white on both bands; that is what makes a band read as a band. */
+  t.check("cards keep their white fill inside a navy band, so the band is the surface",
+    !/\.band-navy\s+\.(?:step|feature|stat-card|explore-tile|category|scheme-card)\{[^}]*background:#0/.test(css));
+  /* Regression, and it is a whole class of bug rather than one line: .band-navy
+     sets color:#fff on the section, and colour is inherited. A white card on a
+     navy band that does not declare its own ink therefore renders white-on-white
+     — which is exactly what happened to the explore tile's <strong> and the
+     feature card's <h3>. So this walks each navy band and checks every card in
+     it, rather than listing the two that broke. */
+  {
+    const CARDS = ["step", "feature", "stat-card", "explore-tile", "category",
+      "scheme-card", "find-box", "searchbar", "filters-panel"];
+    /* A card is white if some rule paints it white, and carries ink if some
+       rule sets its colour. Both are decided by parsing the stylesheet into
+       (selectors, declarations) pairs rather than by regexing the file: a card
+       class is usually one selector in a comma-separated list, so
+       /\.explore-tile\{[^}]*color:/ would miss
+       ".band-navy .find-box,.band-navy .explore-tile{color:var(--ink)}" and
+       report a rule that is right there in the file. */
+    const RULES = [...code(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .map(m => ({ selectors: m[1].split(",").map(x => x.trim()), body: m[2] }));
+    /* The class must be the LAST compound of the selector, because that is what
+       decides whether a rule paints the element or only its descendants.
+       Substring matching credits ".explore-tile span{color:var(--muted)}" as the
+       explore tile declaring its own ink, and so does a plain membership test on
+       the split parts — but a <span> inside the tile says nothing about the
+       tile's own <strong>, which is the element that was white-on-white.
+       ".explore-tile:hover" is correctly excluded: the base must carry the ink. */
+    const targets = (sel, c) => sel.split(/[\s>+~]+/).pop() === "." + c;
+    /* The property has to be matched at a declaration boundary. A plain
+       includes("color:") matches "border-color:" too, which credited the
+       .band-light edge rule as declaring every card's ink — the hole this check
+       was written to close. */
+    const declares = (body, prop) => new RegExp("(?:^|;)\\s*" + prop + "\\s*:").test(body);
+    const rulesFor = (c, prop) => RULES.filter(r => declares(r.body, prop) &&
+      r.selectors.some(sel => targets(sel, c)));
+    const isWhite = c => rulesFor(c, "background")
+      .some(r => /background:\s*(?:#fff(?:fff)?\b|var\(--card\))/.test(r.body));
+    const declaresColour = c => rulesFor(c, "color").length > 0;
+    const navySections = [...html.matchAll(/<section\b[^>]*class="[^"]*\bband-navy\b[^"]*"[^>]*>([\s\S]*?)<\/section>/g)];
+    t.check("the scan found the bands to walk, so the loop below is not vacuous",
+      navySections.length === 3, navySections.length + " navy sections found");
+    /* Which cards a band holds is only half static: the stat, scheme and explore
+       grids are all built by app.js. Attributing every rendered card to every
+       band would be wrong in both directions — it would have demanded ink for
+       .stat-card on the form band, where no stat card exists. So each function
+       is read on its own, and its classes count only for a band that owns the
+       container id the function writes to. */
+    const functions = [...code(js).matchAll(/function (\w+)\([\s\S]*?\n\}/g)].map(m => m[0]);
+    t.check("the app exposes functions to walk, so the JS half is not vacuous",
+      functions.length > 20, functions.length + " functions found");
+    navySections.forEach(m => {
+      const ids = new Set([...m[1].matchAll(/\sid="([^"]+)"/g)].map(x => x[1]));
+      const used = new Set([...[...m[1].matchAll(/class="([^"]*)"/g)].flatMap(x => x[1].split(/\s+/))]);
+      functions.filter(fn => [...fn.matchAll(/getElementById\("([^"]+)"\)/g)].some(x => ids.has(x[1])))
+        .forEach(fn => [...fn.matchAll(/class="([a-z][a-z0-9-]*)/g)].forEach(x => used.add(x[1])));
+      const whiteCards = CARDS.filter(c => used.has(c) && isWhite(c));
+      const label = (m[0].match(/id="([^"]+)"/) || [0, "the last section"])[1];
+      t.check(`"${label}" — every white card on it declares its own ink (${whiteCards.join(", ") || "none found"})`,
+        whiteCards.length > 0 && whiteCards.every(declaresColour),
+        whiteCards.length ? "no ink on: " + whiteCards.filter(c => !declaresColour(c)).join(", ")
+          : "no white card found on this band — the scan is looking for the wrong classes");
+    });
+    /* The scan is only worth anything if it can fail, so its inputs are checked
+       too: enough classes are white-filled to be worth scanning, and every one
+       of them is matched by a rule rather than by a selector substring. */
+    t.check("the scan recognises the white-filled cards it depends on",
+      CARDS.filter(isWhite).length >= 5, CARDS.filter(isWhite).join(", "));
+    /* And the mirror image: a card that is NOT on a navy band must not be made
+       to carry band-specific ink, or the rule starts shadowing real styles. */
+    t.check("the ink rule names only cards that are actually on a navy band",
+      /^\.band-navy \.find-box,\.band-navy \.explore-tile,\.band-navy \.feature\{color:var\(--ink\)\}$/m.test(css),
+      (/\.band-navy \.find-box,[^\n{]*\{color:var\(--ink\)\}/.exec(css) || [""])[0]);
+  }
+  /* A white card on a white section is only its border, so the light bands get a
+     deeper edge and a real shadow. */
+  t.check("light bands strengthen card edges, or the grids stop reading as cards",
+    /\.band-light \.step,[^}]*\.band-light \.filters-panel\{[^}]*border-color:#d5e1ef/.test(css) &&
+    /\.band-light \.step,[^}]*\.band-light \.filters-panel\{[^}]*box-shadow:/.test(css));
+  /* Regression: a blocked card tints itself warm to flag a missing prerequisite.
+     On a white band the old near-white tint erased the flag entirely. */
+  t.check("the blocked-card flag survives on a white band",
+    /\.band-light \.scheme-card\.blocked\{[^}]*background:#fffaf2/.test(css));
+  /* Regression: .ref-note paints its own light fill, so band-wide light text
+     would put #9db2d0 on #f7fafc — unreadable. */
+  t.check(".ref-note is not swept up in the navy band's light text",
+    !/\.band-navy \.ref-note/.test(css) &&
+    /\.ref-note\{[^}]*color:#5f7089/.test(css));
+}
+
+t.step("every text/background pair on the new surfaces clears WCAG AA");
+{
+  const lum = hex => {
+    const c = hex.replace("#", "");
+    const v = [0, 2, 4].map(i => parseInt(c.substr(i, 2), 16) / 255)
+      .map(x => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const ratio = (a, b) => {
+    const [x, y] = lum(a) > lum(b) ? [lum(a), lum(b)] : [lum(b), lum(a)];
+    return (x + 0.05) / (y + 0.05);
+  };
+  const NAVY = "#09264a", WHITE = "#ffffff", GOLD = "#d8a52c", NOTE = "#f7fafc";
+  /* The declaration in the stylesheet is the source of each pair, so a colour
+     change cannot leave the number here quietly describing the old design. */
+  const pairs = [
+    ["hero headline", "#ffffff", NAVY, 4.5, /\.hero\{[^}]*color:#fff/],
+    ["hero lead paragraph", "#cfdcef", NAVY, 4.5, /\.hero p\.lead\{[^}]*color:#cfdcef/],
+    ["hero trust line", "#a9bcd9", NAVY, 4.5, /\.trust\{[^}]*color:#a9bcd9/],
+    ["hero Devanagari line", "#e9c877", NAVY, 4.5, /\.hero \.hi\{[^}]*color:var\(--gold-soft\)/],
+    ["hero eyebrow pill", "#e9c877", "#1b3450", 4.5, /\.badge\{[^}]*color:var\(--gold-soft\)/],
+    ["gold button label", "#0b1c30", GOLD, 4.5, /\.btn-hero\{[^}]*color:#0b1c30/],
+    ["outlined button label", "#ffffff", NAVY, 4.5, /\.btn-ghost\{[^}]*color:#fff/],
+    ["navy band heading", "#ffffff", NAVY, 4.5, /\.band-navy \.section-head h2/],
+    ["navy band body copy", "#c3d3e9", NAVY, 4.5, /\.band-navy \.section-head p/],
+    ["navy band eyebrow", "#e9c877", NAVY, 4.5, /\.band-navy \.eyebrow/],
+    ["navy band fine print", "#9db2d0", NAVY, 4.5, /\.band-navy \.disclaimer/],
+    ["card body copy on white", "#607089", WHITE, 4.5, /\.step p,\.feature p\{[^}]*color:var\(--muted\)/],
+    ["the reference note", "#5f7089", NOTE, 4.5, /\.ref-note\{[^}]*color:#5f7089/],
+  ];
+  pairs.forEach(([label, fg, bg, need, inCss]) => {
+    const r = ratio(fg, bg);
+    t.check(`${label}: ${fg} on ${bg} is ${r.toFixed(2)}:1`, r >= need && inCss.test(css),
+      r >= need ? "but the stylesheet no longer declares that pair" : "below " + need + ":1");
+  });
+  /* A button needs 3:1 for its fill against what it sits on, or the gold edge
+     vanishes into the navy even when the label is legible. */
+  t.check("the gold button is distinguishable from the navy it stands on",
+    ratio(GOLD, NAVY) >= 3, ratio(GOLD, NAVY).toFixed(2) + ":1");
+  t.check("the white disc around the logo is distinguishable from the navy band",
+    ratio(WHITE, NAVY) >= 3, ratio(WHITE, NAVY).toFixed(2) + ":1");
 }
 
 t.step("markup integrity");

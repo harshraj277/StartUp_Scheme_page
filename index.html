@@ -36,10 +36,11 @@
     <div class="hero-copy">
       <span class="badge" id="heroBadge">🇮🇳 Central Government Startup Schemes</span>
       <h1>Find Government Schemes Made for Your Startup.</h1>
-      <p>Search, filter and match a live dataset of Central Government startup schemes — grants, credit guarantees, incubation support, R&D funding and more — against your startup's profile.</p>
+      <p class="hi" lang="hi">आपके स्टार्टअप के लिए सरकारी योजनाएँ</p>
+      <p class="lead">Search, filter and match a live dataset of Central Government startup schemes — grants, credit guarantees, incubation support, R&amp;D funding and more — against your startup's profile.</p>
       <div class="hero-actions">
-        <button class="btn btn-primary" onclick="scrollToFind()">Find My Schemes →</button>
-        <button class="btn btn-light" onclick="resetToBrowse();scrollToId('schemes')">Browse All Schemes</button>
+        <button class="btn btn-hero" onclick="scrollToFind()">Find My Schemes →</button>
+        <button class="btn btn-ghost" onclick="resetToBrowse();scrollToId('schemes')">Browse All Schemes</button>
       </div>
       <div class="trust">
         <span>✓ <span id="trustCount">—</span> schemes in dataset</span>
@@ -48,17 +49,20 @@
         <span>✓ Official-source links on every record</span>
       </div>
     </div>
+    <div class="hero-mark">
+      <img src="img/logo.webp" width="300" height="300" alt="" aria-hidden="true">
+    </div>
   </div>
 </section>
 
-<section id="stats">
+<section class="band-light" id="stats">
   <div class="container">
     <div class="section-head"><div class="eyebrow">Dashboard</div><h2>Government scheme statistics</h2><p>Calculated live from the imported dataset — updates automatically if the dataset changes.</p></div>
     <div class="stats-grid" id="statsGrid"></div>
   </div>
 </section>
 
-<section class="find" id="find">
+<section class="band-navy find" id="find">
   <div class="container">
     <div class="section-head"><h2>Find schemes for my startup</h2><p>Enter a few details. This is an eligibility <strong>guidance and matching tool</strong> — it does not confirm official eligibility. Final eligibility is always determined by the concerned government authority.</p></div>
     <div class="find-box">
@@ -79,7 +83,7 @@
   </div>
 </section>
 
-<section id="schemes">
+<section class="band-light" id="schemes">
   <div class="container">
     <div class="section-head"><h2 id="resultsHeading">Browse all schemes</h2><p>Every record links to its official government source. Verify current eligibility and application details there before applying.</p></div>
 
@@ -128,14 +132,14 @@
   </div>
 </section>
 
-<section id="categories">
+<section class="band-navy" id="categories">
   <div class="container">
     <div class="section-head"><h2>Explore government schemes</h2><p>Jump straight into an area that matters to your startup. Counts are calculated live from the dataset.</p></div>
     <div class="explore-grid" id="exploreGrid"></div>
   </div>
 </section>
 
-<section id="about">
+<section class="band-light" id="about">
   <div class="container">
     <div class="section-head"><div class="eyebrow">How it works</div><h2>From startup profile to relevant schemes.</h2><p>Yojana Setu turns a complicated scheme search into a simple three-step journey.</p></div>
     <div class="steps">
@@ -146,7 +150,7 @@
   </div>
 </section>
 
-<section>
+<section class="band-navy why">
   <div class="container">
     <div class="section-head"><div class="eyebrow">Why Yojana Setu</div><h2>Built to make scheme discovery easier.</h2></div>
     <div class="feature-grid">

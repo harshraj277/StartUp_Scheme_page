@@ -47,9 +47,82 @@ or `node tests/run-tests.js`. Four suites, no dependencies:
 | Suite | What it guards |
 | --- | --- |
 | `tests/engine.test.js` | Scoring order, fuzzy free-text matching, token-AND search, ₹-amount parsing, access-route classification and blocker ranking, that every form input actually scores |
-| `tests/contract.test.js` | Every `getElementById` and inline handler resolves, no dead markup or dead CSS, no facet asked in two places, label/alt wiring, dataset field shape, and that no rule is implemented twice across the two pages |
+| `tests/contract.test.js` | Every `getElementById` and inline handler resolves, no dead markup or dead CSS, no facet asked in two places, label/alt wiring, dataset field shape, the section band order, computed WCAG ratios for every text/background pair on the hero and both bands, and that no rule is implemented twice across the two pages |
 | `tests/e2e.test.js` | Boots the real `app.js` in a stub DOM and drives it as a user would — including paging forward and back through the whole result set, and ticking saved schemes to compare |
 | `tests/compare.test.js` | Boots the real `js/compare.js` the way the main page boots: ids from the query string, the localStorage fallback, orphan disclosure, escaping, and the differences toggle |
+
+## Hero and section backgrounds
+
+The page reads as a stack of bands rather than one long light page.
+
+- **The hero is navy, not white.** It was a pale `#f8fbff → #eef4fb` gradient
+  with dark text. It is now the logo's navy with a gold bloom behind the mark, a
+  dotted wash over the top, and a large gold ring running off the top-right
+  corner. All three are decoration: they sit on `::before`/`::after` behind the
+  content (`.hero .container{z-index:1}`), and both slow rotations stop under
+  `prefers-reduced-motion: reduce`.
+- **One gold call to action, not two solid buttons.** `Find My Schemes` is
+  `.btn-hero` — the brand gold, with a lift on hover. `Browse All Schemes` is
+  `.btn-ghost`, outlined in translucent white and turning gold on hover. Two
+  filled buttons side by side compete and neither reads as the primary one.
+  `.btn-primary` is navy and was left alone, because the navbar already
+  overrides it to gold inside the bar and the two must not both be "the gold
+  button" for different reasons.
+- **The Devanagari line is ours, not a copy.** `आपके स्टार्टअप के लिए सरकारी
+  योजनाएँ`, in `--gold-soft`, `lang="hi"` — it echoes the bilingual wordmark
+  already in the navbar rather than repeating it.
+- **The mark is a white disc, not a cropped circle.** `img/logo.webp` is an
+  opaque square WebP with no alpha channel, so `border-radius:50%` on the image
+  would slice the artwork. The disc is on `.hero-mark`; the image sits inside it
+  with `object-fit:contain` and keeps its own rectangle. The image is
+  `alt="" aria-hidden="true"` — the site's name is in the navbar directly above.
+- **The hero is two columns** — copy left, mark right — and collapses to one at
+  **920px**, where the mark is hidden rather than squeezed. `.hero-copy` also
+  carries `min-width:0`, without which a grid item refuses to shrink below its
+  content and forces the column wider than its share.
+- **Sections alternate navy / white down the page**: hero (navy) → stats
+  (white) → form (navy) → results (white) → categories (navy) → how-it-works
+  (white) → why (navy). The band is a class on each `<section>`, not
+  `:nth-of-type`: the order is a content decision, and `:nth-of-type` would
+  silently repaint every section below whenever one is inserted or removed. The
+  form section's own flat `#09264a` was removed so it takes the shared gradient —
+  beside the hero's it was a visible seam.
+- **Cards stay white on both bands.** That is what makes a band read as a band
+  rather than as a dark page; only the type on the band changes colour.
+  Conversely, a white card on a *white* section is only its 1px border, so the
+  light bands get a deeper edge (`#d5e1ef`) and a real shadow.
+- **Two contrast regressions the bands introduced, both fixed and pinned:**
+  - `.scheme-card.blocked` tinted itself warm to flag a missing prerequisite.
+    On a white band that near-white tint erased the flag, so the light band
+    restates it as `#fffaf2` with a `#f0dcbb` edge.
+  - `.ref-note` paints its own light fill, so it keeps dark text on a light box
+    **even on a navy band**. It is deliberately excluded from the band's light
+    text — that would have put `#9db2d0` on `#f7fafc`. Separately its `#7b8ba1`
+    was only 3.31:1 on its own fill, so it is now `#5f7089` at 4.81:1.
+  - **White cards inherited the band's white text.** This one is the reason the
+    first two were worth looking for. `.band-navy` sets `color:#fff` on the
+    section, and colour is inherited, so a white card that did not declare its
+    own ink rendered white-on-white: the explore tile's `<strong>` and the feature
+    card's `<h3>`. The fix is `.band-navy .find-box,.band-navy .explore-tile,
+    .band-navy .feature{color:var(--ink)}` — deliberately *not* a blanket
+    `.band-navy h2,.band-navy h3` rule, which would have recreated the same bug
+    one level down.
+
+Every text/background pair on the new surfaces is asserted at ≥4.5:1 in
+`tests/contract.test.js`, with the ratio computed from the colours in the
+stylesheet so a colour change cannot leave the assertion describing the old
+design.
+
+The white-on-white case is guarded structurally instead, because it is a whole
+class of bug rather than one line: a test walks each navy band, works out which
+cards it actually holds (reading `app.js` per function so a JS-rendered grid is
+attributed to the section that owns its container, not to all of them), and
+requires every white-filled card among them to declare its own `color`. Two
+things it has to get right, both of which were wrong in the first draft and both
+of which were caught by deleting the fix and watching the test go red: the class
+must be the **last compound** of a selector (`.explore-tile span` says nothing
+about the tile's own text), and the property must match at a **declaration
+boundary** (`includes("color:")` happily matches `border-color:`).
 
 ## Desktop layout
 
@@ -61,9 +134,10 @@ that bit are pinned down by contract tests:
   `min(1320px, 92%)`, which on a wide monitor held the content in the middle
   with two empty margins either side. Because nothing now caps the width,
   anything that must not stretch carries its own cap instead — the hero copy
-  (840px), each section heading (760px), the match form (1000px), footer
-  paragraphs (`62ch`) and the step/feature copy (`64ch`). The card grids and
-  the compare table deliberately have no cap; that is what should use the room.
+  (840px), the hero lead paragraph (`56ch`), each section heading (760px), the
+  match form (1000px), footer paragraphs (`62ch`) and the step/feature copy
+  (`64ch`). The card grids and the compare table deliberately have no cap; that
+  is what should use the room.
 - The nav hands over to the hamburger at **1080px**. Six links plus the
   call-to-action need roughly 880px, so at 1000px there was under 50px of slack —
   a slightly wider system font made the labels wrap and the header grow taller
