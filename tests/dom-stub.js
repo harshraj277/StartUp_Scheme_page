@@ -22,6 +22,35 @@ function makeEl(tag, chipCache, store, rowCache) {
       hidden: false,
     })));
   };
+  /* The beneficiary picker writes its rows as <label class="pick-row" data-
+     beneficiary="…" data-count="n"><input type="checkbox"…>. applyBusinessPicks()
+     reads all three facts off each row and writes .hidden back, so a test has to
+     see the same objects the page sees rather than a string. Kept in the same
+     cache as the chips because it is the same shape: one cache, keyed by the
+     container's id. */
+  const parsePicks = () => {
+    const rows = [..._html.matchAll(/<label class="pick-row([^"]*)" data-beneficiary="([^"]*)" data-count="(\d+)"[^>]*>([\s\S]*?)<\/label>/g)].map(m => {
+      const row = {
+        dataset: { beneficiary: m[2].replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"'), count: m[3] },
+        /* Whatever the markup itself says, kept apart from classList so a test can
+           assert the built rows carry no tick before anything has ticked them. */
+        cls: m[1],
+        classList: makeEl("div", chipCache, store, rowCache).classList,
+        hidden: false,
+        /* syncBusinessTicks() reaches the checkbox through row.querySelector("input")
+           and sets .checked on it, so a test has to be able to read the same
+           property back — reading the HTML string would miss the whole point,
+           because the tick is no longer in the HTML. */
+        _input: { checked: /<input[^>]*\schecked/.test(m[4]), onchange: (/<input[^>]*onchange="([^"]*)"/.exec(m[4]) || [null, ""])[1] },
+        querySelector(sel) { return sel === "input" ? row._input : null; },
+      };
+      return row;
+    });
+    /* Only written when there are any. parseChips() fills the same cache, and a
+       container of chips matches no pick-row, so writing an empty list here
+       would erase the chips the container really has. */
+    if (rows.length) chipCache.set(el._id, rows);
+  };
   const parseRows = () => {
     const rows = {};
     for (const m of _html.matchAll(/<tr class="([^"]*)"[^>]*>([\s\S]*?)<\/tr>/g)) {
@@ -62,36 +91,38 @@ function makeEl(tag, chipCache, store, rowCache) {
     querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache, this._id, store); },
     querySelector() { return makeEl("div", chipCache, store, rowCache); },
     focus() {}, scrollIntoView() {},
+    /* The outside-click close works by asking whether the clicked node is inside
+       the button or the panel. Modelling that is the only way a test can tell
+       "clicked the toggle, so leave it open" from "clicked away, so shut it". */
+    contains(node) {
+      if (!node) return false;
+      if (node === this) return true;
+      return this.children.some(c => (c && typeof c.contains === "function" ? c.contains(node) : c === node));
+    },
   };
   /* resetForm() resets a <select> with selectedIndex = 0, which in a browser
      also changes .value. Modelling only the assignment would leave .value on the
      previously chosen option, so a test could not tell a real reset from a
      no-op — which is exactly how the old #find-inputs bug hid.
-     For a <select multiple> the browser's rule is different and is the whole
-     reason a multi-select cannot be reset with 0: that selects the first option
-     and leaves every other selection alone. Only -1 clears them all. */
+     There is no <select multiple> on either page any more — the beneficiary
+     field is a checkbox list, precisely because a multi-select cannot be given
+     a real collapsed state and a plain click replaces the selection on a
+     desktop. contract.test.js asserts that, and says to restore this branch if a
+     multi-select ever comes back. */
   let _selIdx = 0;
   Object.defineProperty(el, "selectedIndex", {
     get() { return _selIdx; },
     set(i) {
       _selIdx = i | 0;
       if (el.tagName === "SELECT") {
-        if (_selIdx < 0) {
-          el.children.forEach(c => { c.selected = false; });
-        } else {
-          /* On a multiple select, setting an index selects that option and
-             leaves the rest as they were. Only a single-select collapses to one. */
-          if (!el.multiple) el.children.forEach(c => { c.selected = false; });
-          el.children.forEach((c, n) => { if (n === _selIdx) c.selected = true; });
-        }
+        el.children.forEach(c => { c.selected = false; });
+        el.children.forEach((c, n) => { if (n === _selIdx) c.selected = true; });
         el.value = el.children[_selIdx] ? el.children[_selIdx].value : "";
       }
     },
   });
 
-  /* <select>.options is the live list of <option>s. selectedValues() reads the
-     selection through it, because on a multi-select .value gives only the first
-     chosen option. */
+  /* <select>.options is the live list of <option>s. */
   Object.defineProperty(el, "options", {
     get() { return el.tagName === "SELECT" ? el.children : []; },
   });
@@ -100,7 +131,7 @@ function makeEl(tag, chipCache, store, rowCache) {
     get() { return _html; },
     set(v) {
       _html = v;
-      if (el._id) { parseChips(); parseRows(); }
+      if (el._id) { parseChips(); parsePicks(); parseRows(); }
       /* A real browser makes every id written into innerHTML findable via
          getElementById. renderCompareBar() relies on that when it builds the
          compare bar on demand, so the stub has to model it. */
@@ -122,6 +153,9 @@ function makeEl(tag, chipCache, store, rowCache) {
 function runQuery(sel, chipCache, rowCache, hostId, store) {
   const chips = /#([\w-]+) \.chip$/.exec(sel);
   if (chips) return chipCache.get(chips[1]) || [];
+  /* The beneficiary picker's rows live in the same cache under their own id. */
+  const picks = /#([\w-]+) \.pick-row$/.exec(sel);
+  if (picks) return chipCache.get(picks[1]) || [];
   const rows = /#([\w-]+) tr\.([\w-]+)$/.exec(sel);
   if (rows) return (rowCache.get(rows[1]) || {})[rows[2]] || [];
   /* resetForm() clears the form with querySelectorAll("#find input") and
@@ -136,8 +170,8 @@ function runQuery(sel, chipCache, rowCache, hostId, store) {
 
 /* The controls inside <section class="find">, by tag. resetForm() clears them by
    selector, so the stub has to know which is which. */
-const FORM_INPUTS = ["startupName", "sectorFilter"];
-const FORM_SELECTS = ["state", "stage", "business", "recognition", "access", "support", "funding"];
+const FORM_INPUTS = ["startupName", "sectorFilter", "businessFilter"];
+const FORM_SELECTS = ["state", "stage", "recognition", "access", "support", "funding"];
 
 /* The same controls, for tag: a test asserting a field is a <select> needs the
    stub to agree with the markup. sort/fMinistry and friends are selects too. */
@@ -147,7 +181,7 @@ const INPUT_IDS = ["searchInput", ...FORM_INPUTS];
 /* Every id index.html provides. Pre-creating them keeps the stub honest. */
 const PAGE_IDS = ["trustCount","trustMinistries","dashVerified","heroBadge","sectorChips","sectorChipsCount","sectorFilter",
  "fMinistry","fType","fStatus","fFinance","fRepay","govLevelNote",
- "fundCoverage","accessCoverage","accessTag","stage","business","businessPicked","recognition","state","access","support","funding",
+ "fundCoverage","accessCoverage","accessTag","stage","businessPicked","businessPickerBtn","businessPickerLabel","businessPanel","businessFilter","businessPicks","businessPicksCount","recognition","state","access","support","funding",
  "startupName","results","resultCount","paginationWrap","prevPageBtn","nextPageBtn","pagingInfo","browseToolbar","filtersPanel","modeBanner","sectorToggleBtn",
  "sectorPanel","sectorPickerBtn","sectorPickerLabel",
  "quickFilterBanner","resultsHeading","searchInput","sort","toast","modalBackdrop","modalContent",
@@ -158,6 +192,11 @@ const COMPARE_IDS = ["compareSub","diffRowsBtn","colCount","compareMissing","com
 
 function makeCtx(ids, chipCache, rowCache) {
   const store = {};
+  /* Document-level listeners are recorded, not fired, so a test can dispatch one
+     click or key exactly as the browser would. Only the outside-click close reads
+     this: it lives on document because the click can land anywhere, and a stub
+     that swallowed it would leave that behaviour with no test at all. */
+  const docHandlers = { click: [], keydown: [] };
   const document = {
     /* Strict on purpose: anything not in PAGE_IDS returns null, exactly as a
        browser would for a removed control. Auto-creating every id would let a
@@ -166,7 +205,10 @@ function makeCtx(ids, chipCache, rowCache) {
     createElement: (t) => makeEl(t, chipCache, store, rowCache),
     querySelector: () => makeEl("div", chipCache, store, rowCache),
     querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache, null, store); },
-    addEventListener() {},
+    addEventListener(type, fn) { (docHandlers[type] || (docHandlers[type] = [])).push(fn); },
+    /* Test-facing: run every document listener of one type, the way a real
+       bubbling event would, with the node it landed on. */
+    dispatch(type, ev) { (docHandlers[type] || []).forEach(fn => fn(ev)); },
     activeElement: { focus() {} },
     body: makeEl("body", chipCache, store, rowCache),
   };
@@ -186,9 +228,6 @@ function makeCtx(ids, chipCache, rowCache) {
     .matchAll(/<select id="([\w-]+)"([^>]*)>([\s\S]*?)<\/select>/g)) {
     const el = store[m[1]];
     if (!el) continue;
-    /* <select multiple> changes what "selected" means and what a reset has to
-       do, so the stub has to know which selects are multi. */
-    el.multiple = /multiple/.test(m[2]);
     for (const o of m[3].matchAll(/<option([^>]*)>([\s\S]*?)<\/option>/g)) {
       const text = o[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&");
       const opt = makeEl("option", chipCache, store, rowCache);
@@ -196,10 +235,10 @@ function makeCtx(ids, chipCache, rowCache) {
       opt.textContent = text;
       el.appendChild(opt);
     }
-    /* A single select starts on its first option; a multi select starts on
-       nothing, because -1 (nothing selected) is the only honest starting state
-       once several can be chosen. */
-    el.selectedIndex = el.multiple ? -1 : 0;
+    /* Every select on the page starts on its first option. If a <select multiple>
+       comes back, this line and the selectedIndex setter above both have to grow
+       the -1 branch again — contract.test.js fails first if one slips through. */
+    el.selectedIndex = 0;
   }
 
   const localStorage = { _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = v; } };
@@ -225,7 +264,7 @@ function makeEnv(exportBody) {
   const { ctx, store, util } = makeCtx(PAGE_IDS, chipCache, rowCache);
   const app = util + "\n" + fs.readFileSync(path.join(ROOT, "js/app.js"), "utf8") + "\n" + exportBody;
   const api = new Function(...Object.keys(ctx), app)(...Object.values(ctx));
-  return { api, store, chipCache, rowCache, $: (id) => store[id],
+  return { api, store, chipCache, rowCache, $: (id) => store[id], doc: ctx.document,
     cards: () => (store.results.innerHTML.match(/<article class="scheme-card[ "]/g) || []).length };
 }
 

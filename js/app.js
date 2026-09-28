@@ -160,13 +160,14 @@ let currentMode = "browse"; // "browse" | "match" | "saved"
 let currentResults = SCHEMES.slice();
 let quickFilterKey = "";
 let eligSectors = new Set();    // sectors selected in the "Find My Schemes" form
+let eligBeneficiaries = new Set();  // beneficiary types picked in the same form
 let eligProfile = null;
 let currentPage = 1;           // 1-based; results are paged, not appended
 let emptyHint = "";
 const PAGE_SIZE = 9;
 
 /* Dataset vocabularies, filled by initControls() before any scoring runs. */
-let ALL_STAGES=[], ALL_SECTORS=[], ALL_BENEFICIARIES=[];
+let ALL_STAGES=[], ALL_SECTORS=[], ALL_BENEFICIARIES=[], BENEFICIARY_ENTRIES=[];
 
 /* ---------- init / populate dynamic controls ---------- */
 function uniqueValues(key,isArray){
@@ -177,14 +178,10 @@ function uniqueValues(key,isArray){
   });
   return [...c.entries()].sort((a,b)=>b[1]-a[1]);
 }
-/* A <select multiple> reports its selection through each option's .selected, and
-   .value only ever gives the first one. Reading the options is the only way to
-   get all of them, and it is the same call for a single select, so there is one
-   reader rather than two that could disagree. */
-function selectedValues(el){
-  if(!el || !el.options) return [];
-  return [...el.options].filter(o=>o.selected).map(o=>o.value);
-}
+/* selectedValues() used to sit here. It read a <select multiple>'s selection
+   through el.options, because .value on a multi-select gives only the first
+   chosen option. The beneficiary field is a checkbox list now, so its selection
+   is eligBeneficiaries and there is no <select multiple> left on the page. */
 
 function fillSelect(id, entries, {sortAlpha=false}={}){
   const el=document.getElementById(id);
@@ -201,10 +198,12 @@ function fillSelect(id, entries, {sortAlpha=false}={}){
     el.appendChild(o);
   });
 }
-/* Business Stage and Beneficiary Type are plain <select> elements, like State /
-   UT and the advanced filters. They were free-text inputs with a <datalist>,
-   which is why they looked like text boxes: browsers only open a datalist
-   popup once you have typed a character, and draw no arrow to invite you. */
+/* Business Stage is a plain <select>. It used to be a free-text input with a
+   <datalist>, which is why it looked like a text box: browsers only open a
+   datalist popup once you have typed a character, and draw no arrow to invite
+   you. Business / Beneficiary Type is a button and a checkbox list for the same
+   reason plus one more: 76 values, 74% of which reach a single scheme, and a
+   list box that can only be added to with Ctrl-click. */
 /* Advanced filters keep only the facets the match form cannot express.
    Sector, stage, beneficiary and support type were removed from here because the
    match form already owns them, and the search box narrows by all four
@@ -224,19 +223,27 @@ function initControls(){
   ALL_STAGES = stageEntries.map(e=>e[0]);
   ALL_SECTORS = sectorEntries.map(e=>e[0]);
   ALL_BENEFICIARIES = beneficiaryEntries.map(e=>e[0]);
+  /* Kept because the checkbox list has to be re-rendered from the same pairs
+     whenever a pick changes — the checked state is derived from the Set, not
+     maintained alongside it, so the two cannot disagree. */
+  BENEFICIARY_ENTRIES = beneficiaryEntries;
 
   /* Alphabetical, like the advanced filters, and each option carries how many
      schemes reach it. Beneficiary has 76 near-duplicate values across 59
      schemes, so "Pilot (1)" has to be visibly different from "Startups (16)". */
   fillSelect("stage", stageEntries, {sortAlpha:true});
-  fillSelect("business", beneficiaryEntries, {sortAlpha:true});
   fillSelect("fMinistry", ministryEntries, {sortAlpha:true});
   fillSelect("fType", typeEntries, {sortAlpha:true});
 
-  /* Beneficiary Type is a multi-select, so the pick is only visible as a
-     highlight that scrolls away. Echo it in words, and keep that in step. */
-  document.getElementById("business").addEventListener("change", syncBusinessPicks);
-  syncBusinessPicks();
+  /* Every type is offered, none hidden behind a toggle: the filter box is what
+     makes 76 findable, and the count line says how many reach a single scheme
+     so the long tail is not a surprise. The rows are built once; the ticks are
+     synced from the Set, so nothing has to be rebuilt to change them. */
+  renderBeneficiaryPicks();
+  syncBusinessTicks();
+  document.getElementById("businessPickerBtn").addEventListener("click", toggleBusinessPanel);
+  applyBusinessPicks();
+  syncBusinessPanel();
 
   /* Government Level used to be a filter here. Every record in the dataset is
      Central-government, so it could never remove anything — say so instead of
@@ -258,7 +265,7 @@ function initControls(){
      list is collapsed by default — see applySectorChips(). */
   const chipsEl=document.getElementById("sectorChips");
   chipsEl.innerHTML = sectorEntries.map(([v,c])=>
-    `<button class="chip" type="button" data-sector="${esc(v)}" data-count="${c}" onclick="toggleEligSector('${escJs(v)}')">${esc(v)} <span class="dash-mini" style="display:inline">(${c})</span></button>`).join("");
+    `<button class="chip" type="button" data-sector="${esc(v)}" data-count="${c}" onclick="toggleEligSector('${esc(escJs(v))}')">${esc(v)} <span class="dash-mini" style="display:inline">(${c})</span></button>`).join("");
   document.getElementById("sectorToggleBtn").addEventListener("click", toggleSectorList);
   document.getElementById("sectorPickerBtn").addEventListener("click", toggleSectorPanel);
   applySectorChips();
@@ -343,6 +350,21 @@ document.addEventListener("keydown",function(e){
   if(document.getElementById("modalBackdrop").classList.contains("show")) closeModal();
   else if(isMobileNavOpen()) closeMobileNav();
   else if(sectorPanelOpen) closeSectorPanel();
+  else if(businessPanelOpen) closeBusinessPanel();
+});
+/* A dropdown that only closes on its own button or on Escape is a dropdown you
+   have to aim at. Both pickers are <div>s inside the form, so a click anywhere
+   else — the rest of the form, the results, the page — is an unambiguous
+   "I am done here". The button and the panel are both excluded, or the click
+   that opens a picker would immediately close it again on the way up to
+   document. */
+document.addEventListener("click",function(e){
+  const hits = (btnId,panelId) => {
+    const btn=document.getElementById(btnId), panel=document.getElementById(panelId);
+    return (btn && btn.contains(e.target)) || (panel && panel.contains(e.target));
+  };
+  if(!hits("sectorPickerBtn","sectorPanel")) closeSectorPanel();
+  if(!hits("businessPickerBtn","businessPanel")) closeBusinessPanel();
 });
 function toggleFilters(){
   const collapsed = document.getElementById("filtersPanel").classList.toggle("collapsed");
@@ -427,12 +449,118 @@ function closeSectorPanel(){
   sectorPanelOpen=false;
   syncSectorPanel();
 }
+/* ---------- Business / Beneficiary Type: button + checkbox list ----------
+   The same shape as the sector field, deliberately. Two controls in one form
+   both labelled "(select one or more)" have to behave the same way, and this
+   one used to be a <select multiple size="7"> sitting permanently open. */
+let businessPanelOpen = false;
+function renderBeneficiaryPicks(){
+  const box=document.getElementById("businessPicks");
+  if(!box) return;
+  /* Built once, and deliberately with no tick anywhere in the markup:
+     syncBusinessTicks() below is the only thing that ever sets one, and it reads
+     the Set. Re-rendering the rows on every tick instead would destroy the very
+     checkbox whose onchange had just fired, which throws keyboard focus back to
+     the top of the page — so tabbing down the list would restart on every row. */
+  const arr=BENEFICIARY_ENTRIES.slice().sort((a,b)=>a[0].localeCompare(b[0]));
+  box.innerHTML = arr.map(([v,c])=>
+    `<label class="pick-row" data-beneficiary="${esc(v)}" data-count="${c}">` +
+    `<input type="checkbox" onchange="toggleBeneficiary('${esc(escJs(v))}')">` +
+    `<span class="pick-name">${esc(v)} <span class="pick-count">(${c})</span></span></label>`).join("");
+}
+/* The one place a tick is set. Everything else reads eligBeneficiaries, so the
+   list, the button and the note are all the same fact rather than three that have
+   to be kept in step. */
+function syncBusinessTicks(){
+  document.querySelectorAll("#businessPicks .pick-row").forEach(row=>{
+    const on=eligBeneficiaries.has(row.dataset.beneficiary);
+    row.classList.toggle("on", on);
+    const box=row.querySelector("input");
+    if(box) box.checked=on;
+  });
+}
+function applyBusinessPicks(){
+  const filterEl=document.getElementById("businessFilter");
+  const raw=filterEl?filterEl.value:"";
+  const q=normText(raw);
+  let shown=0, matching=0, singletons=0, held=0;
+  document.querySelectorAll("#businessPicks .pick-row").forEach(row=>{
+    const name=row.dataset.beneficiary;
+    const n=parseInt(row.dataset.count,10)||0;
+    if(n<2) singletons++;
+    const matches=!q || normText(name).includes(q);
+    if(matches) matching++;
+    /* A picked row is never hidden by the filter. If searching could make your
+       own pick vanish, you would lose track of what you had chosen and have no
+       way to untick it without clearing the filter and searching again. */
+    const keep=eligBeneficiaries.has(name);
+    if(keep && !matches) held++;
+    row.hidden=!(matches||keep);
+    if(!row.hidden) shown++;
+  });
+  const total=ALL_BENEFICIARIES.length;
+  const countEl=document.getElementById("businessPicksCount");
+  if(countEl){
+    countEl.textContent = q
+      ? `${matching} of ${total} types match “${raw.trim()}”` +
+        (held ? ` · ${held} picked ${held===1?"type is":"types are"} kept visible` : "")
+      : `Showing all ${total} types · ${singletons} of them reach a single scheme each`;
+  }
+  const box=document.getElementById("businessPicks");
+  if(box) box.setAttribute("data-shown", String(shown));
+}
+function filterBusinessPicks(){ applyBusinessPicks(); }
+function toggleBeneficiary(v){
+  if(eligBeneficiaries.has(v)) eligBeneficiaries.delete(v); else eligBeneficiaries.add(v);
+  syncBusinessTicks();
+  applyBusinessPicks();
+  syncBusinessPickerLabel();
+  syncBusinessPicks();
+}
+/* Labels run to 47 characters, so the closed button cannot show them all without
+   growing to three lines. It shows the first one truncated and how many others
+   are picked; the note underneath lists every pick in full, and a Clear.
+   Sorted, not click order: the list above is alphabetical, so the name on the
+   closed button has to be the top ticked row of the list you just closed, not
+   whichever one you happened to click first. */
+function syncBusinessPickerLabel(){
+  const el=document.getElementById("businessPickerLabel");
+  if(!el) return;
+  const names=[...eligBeneficiaries].sort((a,b)=>a.localeCompare(b));
+  el.textContent = names.length===0 ? "Select beneficiary types…"
+    : names.length===1 ? truncate(names[0],34)
+    : `${truncate(names[0],30)} +${names.length-1} more`;
+  const btn=document.getElementById("businessPickerBtn");
+  if(btn) btn.classList.toggle("has-value", names.length>0);
+}
+function syncBusinessPanel(){
+  const panel=document.getElementById("businessPanel");
+  if(panel) panel.hidden=!businessPanelOpen;
+  const btn=document.getElementById("businessPickerBtn");
+  if(btn){
+    btn.setAttribute("aria-expanded", String(businessPanelOpen));
+    btn.classList.toggle("open", businessPanelOpen);
+  }
+  syncBusinessPickerLabel();
+}
+function toggleBusinessPanel(){
+  businessPanelOpen=!businessPanelOpen;
+  syncBusinessPanel();
+  if(businessPanelOpen) applyBusinessPicks();
+}
+function closeBusinessPanel(){
+  if(!businessPanelOpen) return;
+  businessPanelOpen=false;
+  syncBusinessPanel();
+}
+
 function toggleEligSector(v){
   if(eligSectors.has(v)) eligSectors.delete(v); else eligSectors.add(v);
   document.querySelectorAll("#sectorChips .chip").forEach(c=>c.classList.toggle("active",eligSectors.has(c.dataset.sector)));
   applySectorChips();
   syncSectorPickerLabel();
 }
+
 function onFilterChange(){currentMode="browse"; currentPage=1; renderResults();}
 function onSearchInput(){currentMode="browse"; currentPage=1; renderResults();}
 function resetToBrowse(){
@@ -606,7 +734,7 @@ function scoreScheme(s,p){
 
 function findSchemes(){
   const stageRaw=document.getElementById("stage").value.trim();
-  const bizValues=selectedValues(document.getElementById("business"));
+  const bizValues=[...eligBeneficiaries];
   const recognition=document.getElementById("recognition").value;
   const access=document.getElementById("access").value;
   const support=document.getElementById("support").value;
@@ -670,37 +798,52 @@ function findSchemes(){
 }
 function resetForm(){
   document.querySelectorAll("#find input").forEach(e=>e.value="");
-  /* selectedIndex = 0 is wrong for a <select multiple>: there it selects the
-     first option and leaves every other selection in place, so "Reset" would
-     have kept the picks and added one. -1 deselects all, which is what a reset
-     of a multi-select has to mean. */
-  document.querySelectorAll("#find select").forEach(e=>{ e.selectedIndex = e.multiple ? -1 : 0; });
-  document.getElementById("sectorFilter").value="";   /* explicit: the chip list depends on it */
+  document.querySelectorAll("#find select").forEach(e=>{ e.selectedIndex=0; });
+  /* The two filter boxes are cleared again by name: they are inputs, so the line
+     above already emptied them, but the lists they drive are only re-filtered
+     because these two calls run. */
+  document.getElementById("sectorFilter").value="";
+  document.getElementById("businessFilter").value="";
   eligSectors.clear();
+  eligBeneficiaries.clear();
   sectorListExpanded=false;
   sectorPanelOpen=false;
+  businessPanelOpen=false;
+  renderBeneficiaryPicks();
   syncBusinessPicks();
   applySectorChips();
   syncSectorPanel();
+  syncBusinessTicks();
+  applyBusinessPicks();
+  syncBusinessPanel();
   resetToBrowse();
 }
 
-/* A multi-select's selected rows scroll out of sight, and picking several needs
-   Ctrl / Cmd-click, so the state is echoed in words under the control — and a
-   Clear button, because deselecting one of five otherwise means finding it
-   again in a list of 76. */
+/* The list is a scroller, so a tick near the top scrolls out of view while you
+   carry on down the 76 rows. The picks are therefore also spelled out in words
+   under the button, with a Clear — unticking one of five otherwise means
+   filtering, scrolling and hunting for it again. */
 function syncBusinessPicks(){
   const note=document.getElementById("businessPicked");
   if(!note) return;
-  const picks=selectedValues(document.getElementById("business"));
+  const picks=[...eligBeneficiaries].sort((a,b)=>a.localeCompare(b));
   note.innerHTML = picks.length
     ? `<strong>${picks.length} selected</strong>: ${picks.map(esc).join(", ")} ` +
       `<button type="button" class="link-btn" onclick="clearBusinessPicks()">Clear</button>`
-    : `Nothing selected &mdash; Ctrl / Cmd-click to pick more than one.`;
+    : `Nothing selected &mdash; tick as many as apply.`;
 }
 function clearBusinessPicks(){
-  const el=document.getElementById("business");
-  if(el) el.selectedIndex=-1;
+  eligBeneficiaries.clear();
+  /* The filter is cleared too, so the full 76 come back. Leaving a search term
+     behind and showing one row with no visible way to widen it reads as a bug. */
+  const filterEl=document.getElementById("businessFilter");
+  if(filterEl) filterEl.value="";
+  /* Ticks are synced from the Set rather than unticked one box at a time: one
+     reader, so no box can be left disagreeing with the profile. The rows
+     themselves are left alone, so focus stays wherever the Clear button was. */
+  syncBusinessTicks();
+  applyBusinessPicks();
+  syncBusinessPanel();
   syncBusinessPicks();
 }
 
@@ -816,7 +959,7 @@ function renderResults(){
     } else if(isSaved){
       const {found,missing}=savedSchemes();
       const orphans = missing.length
-        ? `<div class="stale-note">${missing.length} saved scheme${missing.length===1?" is":"s are"} no longer in the current dataset, so ${missing.length===1?"it cannot":"they cannot"} be shown above. ${missing.map(id=>`<button class="stale-chip" onclick="removeSaved('${escJs(id)}')">${esc(id)} ✕</button>`).join(" ")}</div>`
+        ? `<div class="stale-note">${missing.length} saved scheme${missing.length===1?" is":"s are"} no longer in the current dataset, so ${missing.length===1?"it cannot":"they cannot"} be shown above. ${missing.map(id=>`<button class="stale-chip" onclick="removeSaved('${esc(escJs(id))}')">${esc(id)} ✕</button>`).join(" ")}</div>`
         : "";
       /* The checkboxes are only obvious if something says what they are for. */
       const nSel=compareList.length;

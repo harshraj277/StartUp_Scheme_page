@@ -4,6 +4,12 @@
    drift, and the page that drifted would be the one showing unescaped scheme
    names. Loaded before app.js / compare.js. */
 function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+/* For a value going into a JS string that is itself inside an HTML attribute —
+   onclick="f('…')". escJs alone is not enough there: it escapes the backslash and
+   the single quote the JS needs, but not the double quote that would close the
+   attribute, so a value containing one would break out of the handler. Compose as
+   esc(escJs(v)), which is the right order: the browser decodes the entities
+   before it parses the JS, so the JS ends up with exactly what escJs produced. */
 function escJs(t){return String(t).replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
 function truncate(t,n){t=String(t==null?"":t);return t.length>n ? t.slice(0,n).replace(/\s+\S*$/,"")+"…" : t;}
 

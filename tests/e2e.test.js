@@ -18,21 +18,23 @@ return {
   filterSectorChips, applyQuickFilter, resetForm,
   toggleSectorList, applySectorChips, toggleEligSector,
   toggleSectorPanel, closeSectorPanel,
-  resolveAgainst, selectedValues, syncBusinessPicks, clearBusinessPicks,
+  get eligBeneficiaries(){ return eligBeneficiaries; },
+  toggleBeneficiary, applyBusinessPicks, filterBusinessPicks,
+  toggleBusinessPanel, closeBusinessPanel, syncBusinessPicks, clearBusinessPicks,
+  resolveAgainst,
   SCHEMES, ALL_SECTORS, ALL_STAGES, ALL_BENEFICIARIES, SUPPORT_BUCKETS, searchScore
 };`;
-const { api, $, cards, chipCache } = makeEnv(EX);
-/* Setting .value = "" does NOT clear a <select multiple>: it deselects
-   options whose value is "", and a multi-select has none. clearForm() below used
-   to do exactly that, so picks survived between steps and every later
-   assertion was reading a dirty form. */
+const { api, $, cards, chipCache, doc } = makeEnv(EX);
+/* The beneficiary field is a Set plus a checkbox list. Driving it the way a user
+   does — one toggle at a time through the real toggleBeneficiary() — is the only
+   version of this that would have caught the old control losing picks, because
+   the old bug was about what a *second* click did. */
 const pickBusiness = (values) => {
-  const el = $("business");
-  el.children.forEach(o => { o.selected = values.indexOf(o.value) > -1; });
-  el.value = values.length ? el.children.find(o => o.selected).value : "";
-  api.syncBusinessPicks();
+  api.clearBusinessPicks();
+  values.forEach(v => api.toggleBeneficiary(v));
 };
-const businessPicks = () => $("business").children.filter(o => o.selected).map(o => o.value);
+const businessPicks = () => [...api.eligBeneficiaries];
+const pickRows = () => chipCache.get("businessPicks") || [];
 
 const clearForm = () => {
   ["stage","recognition","access","support","funding","state","startupName"].forEach(i => { $(i).value = ""; });
@@ -132,7 +134,9 @@ try {
   t.check("a stage value can only be one the dataset contains",
     $("stage").children.every(c => c.value === "" || api.ALL_STAGES.indexOf(c.value) > -1));
   t.check("a beneficiary value can only be one the dataset contains",
-    $("business").children.every(c => api.ALL_BENEFICIARIES.indexOf(c.value) > -1));
+    pickRows().length === api.ALL_BENEFICIARIES.length &&
+    pickRows().every(c => api.ALL_BENEFICIARIES.indexOf(c.dataset.beneficiary) > -1),
+    pickRows().length + " rows");
   t.check("fuzzy resolution still works underneath, for a restored value",
     api.resolveAgainst("early strt", api.ALL_STAGES).value === "Early Stage");
   t.check("and it still refuses cleanly on text that means nothing",
@@ -146,7 +150,7 @@ try {
   t.step("Find My Schemes — a full profile");
   clearForm(); api.resetToBrowse();
   $("stage").value = "Idea";
-  $("business").value = "DPIIT-recognised startups";
+  api.toggleBeneficiary("DPIIT-recognised startups");
   $("recognition").value = "DPIIT";
   $("support").value = "grant";
   $("funding").value = "₹25 lakh–₹1 crore";
@@ -524,77 +528,184 @@ try {
 }
 
 try {
-  t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
+  t.step("Business Stage is a real dropdown, like State / UT");
   const opts = (id) => $("" + id).children;
+  const HTML = require("fs").readFileSync("index.html", "utf8");
+  const CSS = require("fs").readFileSync("css/styles.css", "utf8");
 
-  t.check("both are <select> elements, so the browser draws its own dropdown",
-    $("stage").tagName === "SELECT" && $("business").tagName === "SELECT",
-    $("stage").tagName + "/" + $("business").tagName);
+  t.check("the stage control is a <select>, so the browser draws its own dropdown",
+    $("stage").tagName === "SELECT", $("stage").tagName);
   t.check(`the stage dropdown offers all ${api.ALL_STAGES.length} dataset stages`,
     opts("stage").length === api.ALL_STAGES.length + 1, opts("stage").length);
-  t.check(`the beneficiary dropdown offers all ${api.ALL_BENEFICIARIES.length} dataset values`,
-    opts("business").length === api.ALL_BENEFICIARIES.length, opts("business").length);
   t.check("stage is a single-choice select with a labelled empty option, like State / UT's",
-    $("stage").multiple === false && $("stage").children[0].value === "" &&
+    $("stage").children[0].value === "" &&
     /Select business stage/.test($("stage").children[0].textContent));
   t.check("the empty option is the one selected on load, so nothing is pre-filled",
     $("stage").children[0].selected === true);
 
-  t.step("Beneficiary Type is a multiple select");
-  t.check("the markup says multiple, so the browser allows several picks",
-    /<select id="business" multiple/.test(require("fs").readFileSync("index.html", "utf8")) &&
-    $("business").multiple === true);
-  t.check("nothing is selected on load \u2014 a multi-select has no placeholder row",
-    businessPicks().length === 0, businessPicks().join(" | "));
-  t.check("and none is in the markup either, so no empty option can be picked by accident",
-    $("business").children.every(c => c.value !== ""));
-  /* A native multi-select is 4 rows tall by default, which is a peephole into 76
-     options. The size attribute is what gives it a usable height. */
-  t.check("the list box is given real rows, not the browser default of four",
-    /<select id="business" multiple size="(\d+)"/.test(
-      require("fs").readFileSync("index.html", "utf8")) &&
-    Number(/size="(\d+)"/.exec(require("fs").readFileSync("index.html", "utf8"))[1]) >= 6,
-    (/<select id="business"[^>]*>/.exec(require("fs").readFileSync("index.html", "utf8")) || [])[0]);
-  t.check("it keeps a normal grid cell, so the form gains no empty cell",
-    !/class="field field-multi"/.test(require("fs").readFileSync("index.html", "utf8")) &&
-    !/\.field-multi\{/.test(require("fs").readFileSync("css/styles.css", "utf8")));
+  t.step("Beneficiary Type is a picker that expands, like the sector field");
+  /* This control used to be <select multiple size="7">. A list box has no
+     expanded state, so it never collapsed, and on a desktop a plain click
+     REPLACED the selection instead of adding to it unless you held Ctrl — which
+     is why the old note had to explain Ctrl / Cmd-click, and why a phone and a
+     laptop behaved differently. Checkboxes remove the modifier entirely. */
+  t.check("no <select multiple> is left anywhere on the page",
+    !/<select[^>]*\smultiple/.test(HTML), (/<select[^>]*multiple[^>]*>/.exec(HTML) || [])[0]);
+  t.check("the control is a button that owns a panel, so it has a collapsed state",
+    /<button[^>]*id="businessPickerBtn"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(HTML));
+  t.check("and the panel is inside the button's field, hidden until it is opened",
+    /id="businessPanel"[^>]*\shidden/.test(HTML));
+  t.check("the panel is a scrollable checkbox list, not a permanent list box",
+    /<div class="pick-list" id="businessPicks"/.test(HTML) &&
+    /\.pick-list\{[^}]*max-height:\d+px[^}]*overflow:auto/.test(CSS) &&
+    !/\.field select\[multiple\]/.test(CSS),
+    (/\.pick-list\{[^}]*\}/.exec(CSS) || [])[0]);
+  t.check("every row is a real checkbox inside its label, so a click always toggles",
+    ($("businessPicks").innerHTML.match(/type="checkbox"/g) || []).length === pickRows().length &&
+    pickRows().length > 0,
+    ($("businessPicks").innerHTML.match(/type="checkbox"/g) || []).length + " boxes");
+  t.check(`all ${api.ALL_BENEFICIARIES.length} values are offered, none hidden behind a toggle`,
+    pickRows().length === api.ALL_BENEFICIARIES.length, pickRows().length);
+  t.check("the list is alphabetical, so it can be scanned",
+    pickRows().every((r, i) => i === 0 ||
+      r.dataset.beneficiary.localeCompare(pickRows()[i - 1].dataset.beneficiary) > 0),
+    pickRows().slice(0, 2).map(c => c.dataset.beneficiary).join(" | "));
+  t.check("each row states how many schemes reach it, so a one-off label is visible",
+    /Startups <span class="pick-count">\(16\)<\/span>/.test($("businessPicks").innerHTML) &&
+    /Biotech innovators <span class="pick-count">\(2\)<\/span>/.test($("businessPicks").innerHTML),
+    (/Startups[^<]*<span class="pick-count">[^<]*/.exec($("businessPicks").innerHTML) || [])[0]);
+  t.check("and the count line says how much of the list is one-off",
+    /reach a single scheme each/.test($("businessPicksCount").textContent),
+    $("businessPicksCount").textContent);
+  t.check("nothing is selected on load", businessPicks().length === 0, businessPicks().join(" | "));
 
-  /* Several picks must be readable back, with no duplicates. Order is document
-     order, not click order: el.options is in DOM order in a browser too, and
-     nothing downstream depends on the order. */
+  t.step("it opens, closes, and closes again when you click away");
+  t.check("closed on load", $("businessPanel").hidden === true);
+  api.toggleBusinessPanel();
+  t.check("clicking the button opens it and says so to a screen reader",
+    $("businessPanel").hidden === false &&
+    $("businessPickerBtn").getAttribute("aria-expanded") === "true" &&
+    $("businessPickerBtn").classList.contains("open"));
+  api.closeBusinessPanel();
+  t.check("clicking it again closes it",
+    $("businessPanel").hidden === true &&
+    $("businessPickerBtn").getAttribute("aria-expanded") === "false");
+  api.toggleBusinessPanel();
+  /* The outside-click close is a document listener, so it has to be driven the
+     way the browser drives it. Before this existed the only ways out of either
+     picker were its own button and Escape. */
+  doc.dispatch("click", { target: $("businessPickerBtn") });
+  t.check("a click on the button itself leaves it open rather than closing it on the way up",
+    $("businessPanel").hidden === false);
+  doc.dispatch("click", { target: $("results") });
+  t.check("a click anywhere else closes it", $("businessPanel").hidden === true);
+  api.toggleBusinessPanel();
+  doc.dispatch("keydown", { key: "Escape" });
+  t.check("Escape closes it too", $("businessPanel").hidden === true);
+  t.check("and the sector picker above is not dragged along by it",
+    $("sectorPanel").hidden === true);
+  api.toggleSectorPanel();
+  doc.dispatch("click", { target: $("results") });
+  t.check("the sector picker got the same outside-click close",
+    $("sectorPanel").hidden === true);
+
+  t.step("picking several types keeps all of them");
+  /* Driven one toggle at a time on purpose. The old bug was what the *second*
+     click did, so setting a flag directly and then asserting the result would
+     have passed straight over it. */
   pickBusiness(["Startups", "MSMEs", "DPIIT-recognised startups"]);
   t.check("three picks are all readable, not just the first",
     businessPicks().length === 3 &&
     businessPicks().slice().sort().join("|") === "DPIIT-recognised startups|MSMEs|Startups",
     businessPicks().join(" | "));
-  t.check("a <select multiple>'s .value is only the first option in document order, which is why the",
-    $("business").value === "DPIIT-recognised startups", $("business").value);
-  t.check("matcher reads the options, not .value", api.selectedValues($("business")).length === 3);
+  api.toggleBeneficiary("Researchers");
+  t.check("a fourth pick adds to the three rather than replacing them",
+    businessPicks().length === 4, businessPicks().join(" | "));
+  api.toggleBeneficiary("Researchers");
+  t.check("ticking the same row again unticks it, so there is no Ctrl needed to remove one",
+    businessPicks().length === 3, businessPicks().join(" | "));
+  /* Read the checkbox, not the HTML. The tick is no longer in the markup — it is
+     set on the input, because re-rendering 76 rows on every click would destroy
+     the checkbox whose onchange had just fired and throw keyboard focus back to
+     the top of the page. An assertion on innerHTML would now pass whatever the
+     page did, which is the failure this check exists to prevent. */
+  t.check("the tick on each checkbox is the pick, and the two cannot disagree",
+    pickRows().filter(r => r._input.checked).length === 3 &&
+    pickRows().every(r => r._input.checked === businessPicks().includes(r.dataset.beneficiary)),
+    pickRows().filter(r => r._input.checked).length + " checked of " + pickRows().length);
+  t.check("and the highlighted row agrees with the box, since both are driven from the Set",
+    pickRows().filter(r => r.classList.contains("on")).length === 3 &&
+    pickRows().every(r => r.classList.contains("on") === r._input.checked),
+    pickRows().filter(r => r.classList.contains("on")).length + " highlighted");
+  /* This measures the rendered rows, not the absence of a rebuild — the DOM stub
+     does not re-parse the list when innerHTML is reassigned, so a rebuild would
+     be invisible here. "Ticking never rebuilds" is a static property of the
+     source and is pinned in the contract suite, which can see it. */
+  t.check("and no row carries a tick in its markup, so a tick cannot go stale",
+    pickRows().every(r => r.cls === ""),
+    (pickRows().find(r => r.cls !== "") || { cls: "no row carries a class in its markup" }).cls);
+  t.check("each row's box is wired to the toggle for that row, with the value escaped",
+    pickRows().filter(r => r._input.onchange === "toggleBeneficiary('" + r.dataset.beneficiary.replace(/'/g, "\\'") + "')").length === pickRows().length,
+    pickRows()[0]._input.onchange);
+  t.check("the closed button names the top ticked row of the list, not whichever was clicked first",
+    /DPIIT-recognised startups \+2 more/.test($("businessPickerLabel").textContent),
+    $("businessPickerLabel").textContent);
+  t.check("and the note lists the picks in that same order, so both read like the list",
+    $("businessPicked").innerHTML.indexOf("DPIIT-recognised startups") <
+    $("businessPicked").innerHTML.indexOf("MSMEs") &&
+    $("businessPicked").innerHTML.indexOf("MSMEs") < $("businessPicked").innerHTML.indexOf("Startups"),
+    $("businessPicked").innerHTML);
 
-  /* The picks are only a highlight that scrolls away, so they are echoed. */
   t.check("the picks are spelled out under the control",
     /3 selected/.test($("businessPicked").innerHTML) &&
     /Startups/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
   t.check("and there is a way to drop them all without hunting in 76 rows",
     /Clear/.test($("businessPicked").innerHTML));
   pickBusiness([]);
-  t.check("with nothing picked the note says so and says how to pick several",
-    /Nothing selected/.test($("businessPicked").innerHTML) &&
-    /Ctrl/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
+  t.check("with nothing picked the note says so",
+    /Nothing selected/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
   t.check("and the Clear button is gone when there is nothing to clear",
     !/Clear/.test($("businessPicked").innerHTML));
+  t.check("and no row is left ticked in the list",
+    pickRows().every(r => !r._input.checked && !r.classList.contains("on")),
+    pickRows().filter(r => r._input.checked).map(r => r.dataset.beneficiary).join(" | ") || "none");
 
   pickBusiness(["Startups", "MSMEs"]);
   api.clearBusinessPicks();
-  t.check("Clear empties the list box", businessPicks().length === 0, businessPicks().join(" | "));
+  t.check("Clear empties the list", businessPicks().length === 0, businessPicks().join(" | "));
   t.check("and the note goes back to its empty wording",
     /Nothing selected/.test($("businessPicked").innerHTML));
+  t.check("and it clears the filter box too, so the full list comes back",
+    $("businessFilter").value === "" && pickRows().every(r => r.hidden === false));
+
+  t.step("the filter box, for 76 values that are mostly one-offs");
+  $("businessFilter").value = "biotech";
+  api.filterBusinessPicks();
+  const shown = pickRows().filter(r => !r.hidden).map(r => r.dataset.beneficiary);
+  t.check(`filtering on a near-duplicate cluster leaves a usable list (${shown.length})`,
+    shown.length >= 4 && shown.length <= 8 && shown.every(n => /biotech/i.test(n)),
+    shown.join(" | "));
+  t.check("and the count line says how many of the whole list matched",
+    new RegExp(shown.length + " of " + api.ALL_BENEFICIARIES.length + " types match").test($("businessPicksCount").textContent),
+    $("businessPicksCount").textContent);
+  /* The one behaviour worth pinning: a pick must not be able to disappear. */
+  api.toggleBeneficiary("MSMEs");
+  $("businessFilter").value = "biotech";
+  api.filterBusinessPicks();
+  t.check("a picked row stays visible even when the filter does not match it, so you can untick it",
+    pickRows().filter(r => !r.hidden).map(r => r.dataset.beneficiary).includes("MSMEs"));
+  t.check("and the count line admits it is holding a pick open",
+    /picked type is kept visible/.test($("businessPicksCount").textContent),
+    $("businessPicksCount").textContent);
+  $("businessFilter").value = "";
+  api.filterBusinessPicks();
+  t.check("clearing the filter brings every row back",
+    pickRows().every(r => r.hidden === false));
+  api.clearBusinessPicks();
 
   const stageLabels = opts("stage").map(c => c.textContent);
-  const bizLabels = opts("business").map(c => c.textContent);
-  t.check("every option states how many schemes reach it, so one-off labels are visible",
-    stageLabels.includes("Idea (33)") && bizLabels.includes("Startups (16)"),
-    stageLabels.slice(0, 3).join(" | "));
+  t.check("every stage option states how many schemes reach it, so one-off labels are visible",
+    stageLabels.includes("Idea (33)"), stageLabels.slice(0, 3).join(" | "));
   t.check("options are alphabetical, so the list can be scanned",
     stageLabels.indexOf("Commercialisation (2)") > -1 &&
       stageLabels.indexOf("Commercialisation (2)") < stageLabels.indexOf("Growth (40)"),
@@ -616,17 +727,23 @@ try {
   t.check("selecting a stage stores the exact dataset string the matcher compares",
     $("stage").value === "Early Stage");
 
-  /* The reset is where a multi-select quietly breaks: selectedIndex = 0 selects
-     the first option and leaves the rest, so "Reset" would have kept the picks. */
+  t.step("reset puts the form back as it loaded");
   pickBusiness(["Startups", "MSMEs", "Researchers"]);
   $("stage").selectedIndex = 3;
+  $("businessFilter").value = "bio";
   api.resetForm();
-  t.check("resetForm deselects every pick, not just the first",
+  t.check("resetForm drops every pick, not just the first",
     businessPicks().length === 0, businessPicks().join(" | "));
   t.check("resetForm puts the single-selects back to their empty option",
     $("stage").value === "", JSON.stringify($("stage").value));
-  t.check("and the note under the multi-select agrees it is empty",
+  t.check("and the note under the picker agrees it is empty",
     /Nothing selected/.test($("businessPicked").innerHTML));
+  t.check("and the panel is shut and unfiltered, not left open on a stale list",
+    $("businessPanel").hidden === true && $("businessFilter").value === "" &&
+    pickRows().every(r => r.hidden === false));
+  t.check("and the closed button has gone back to its prompt",
+    $("businessPickerLabel").textContent === "Select beneficiary types…",
+    $("businessPickerLabel").textContent);
 } catch (e) {
   t.bad("threw: " + e.stack.split("\n").slice(0, 3).join(" | "));
 }

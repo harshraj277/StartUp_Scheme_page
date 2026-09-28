@@ -177,8 +177,11 @@ t.check("expanded state is mirrored for assistive tech",
 t.check("the closed control reports the current selection instead of hiding it",
   /syncSectorPickerLabel/.test(js) && /sectorPickerLabel/.test(html));
 t.check("Escape closes the panel", /else if\(sectorPanelOpen\) closeSectorPanel\(\)/.test(js));
-t.check("the panel has a closed rule, so hidden actually works on a div",
-  /\.sector-panel\[hidden\]\{display:none\}/.test(css));
+  /* The rule is on .picker-panel, which the beneficiary panel shares \u2014 renamed
+     from .sector-panel when that field joined it, so one class cannot style one
+     field's panel open and leave the other's shut. */
+  t.check("the panel has a closed rule, so hidden actually works on a div",
+  /\.picker-panel\[hidden\]\{display:none\}/.test(css) && !/\.sector-panel\{/.test(css));
 t.check("the control is styled to match the select it imitates", /\.select-like\{/.test(css));
 t.check("reset closes the panel and clears the label", /sectorPanelOpen=false;/.test(js));
 /* compareBar / compareBarText / compareBarLink are created at runtime by renderCompareBar(). */
@@ -228,7 +231,7 @@ t.check("a saved card is not given a fabricated match score",
   /s,pct:null,why:\[\],blockers:\[\]/.test(js) && /pct!==null&&pct!==undefined/.test(js));
 t.check("a saved id that has left the dataset is disclosed, not silently dropped",
   /no longer in the current dataset/.test(js) && /function savedSchemes/.test(js) && /missing\.length/.test(js));
-t.check("an orphan id can be cleaned up from the banner", /function removeSaved\(id\)/.test(js) && /removeSaved\('\$\{escJs\(id\)\}'\)/.test(js));
+t.check("an orphan id can be cleaned up from the banner", /function removeSaved\(id\)/.test(js) && /removeSaved\('\$\{esc\(escJs\(id\)\)\}'\)/.test(js));
 t.check("the empty shortlist explains how to save and that storage is local",
   /Nothing saved yet/.test(js) && /Tap <b>Save<\/b>/.test(js) && /local storage/.test(js));
 t.check("the orphan notice is styled, and no longer needs grid placement",
@@ -265,8 +268,13 @@ t.check("1 selection is not a comparison, and the bar says so",
 t.check("the shortlist banner tells you what the checkbox is for",
   /Tick <b>Compare<\/b>/.test(js) && /Save at least 2 schemes to compare/.test(js) &&
   /compareLinkHtml\(\)/.test(js));
-t.check("the .pick markup lives in the one card renderer, not duplicated",
-  (js.match(/class="pick/g) || []).length === 1);
+  /* Matched exactly, not as a prefix. /class="pick/ also matched the beneficiary
+     rows (class="pick-row"), so a second and unrelated family of .pick*
+     classes silently turned this into a check on the wrong thing. */
+  t.check("the .pick markup lives in the one card renderer, not duplicated",
+  (js.match(/class="pick\$\{/g) || []).length === 1);
+  t.check("and the beneficiary rows are a distinct class, so the two do not shadow each other",
+  /class="pick-row/.test(js) && /\.pick-row\{/.test(css) && !/\.pick\.pick-row/.test(css));
 
 t.step("compare opens in its own tab, not as a section below the page");
 /* The table used to be a section under the results, so comparing pushed the
@@ -387,38 +395,75 @@ t.check("the css braces still balance",
    draws no arrow inviting you to. They are plain <select> elements now, like
    State / UT and the advanced filters, so the browser draws the dropdown and
    the whole list is one click away with nothing to expand first. */
-t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
+t.step("Business Stage and Beneficiary Type are pickers, like State / UT");
 {
+  /* Both used to be <input list="..."> + <datalist>, which is why the user saw
+     no drop: a browser only opens a datalist popup once you have typed a
+     character, and draws no arrow inviting you to. Stage is a plain <select>,
+     so the browser draws the dropdown. Beneficiary needs several answers, and a
+     <select multiple> cannot give them a real collapsed state, so it is a button
+     and a panel — the same shape as the sector field below it. */
   t.check("neither is a free-text input or a datalist any more",
-    /<select id="stage"/.test(html) && /<select id="business"/.test(html) &&
+    /<select id="stage"/.test(html) && /id="businessPickerBtn"/.test(html) &&
     !/<input id="stage"/.test(html) && !/<input id="business"/.test(html) &&
     !/<datalist/.test(html) && !/list="(stage|business)List"/.test(html));
   /* A single <select> with no placeholder starts on the first real value, so the
-     form would submit an answer the user never gave. Stage gets one. The
-     multi-select deliberately has none — see the step below. */
+     form would submit an answer the user never gave. Stage gets one. */
   t.check("stage starts on a labelled empty option, so nothing is pre-filled",
     /<select id="stage"><option value="">Select business stage<\/option>/.test(html));
-  t.check("both are populated from the dataset by the same helper the filters use",
-    /fillSelect\("stage", stageEntries/.test(js) && /fillSelect\("business", beneficiaryEntries/.test(js));
+  t.check("both are populated from the dataset, stage through the helper the filters use",
+    /fillSelect\("stage", stageEntries/.test(js) && /function fillSelect\(/.test(code(js)) &&
+    /function renderBeneficiaryPicks\(\)/.test(code(js)) &&
+    /BENEFICIARY_ENTRIES\s*=\s*beneficiaryEntries/.test(js));
   t.check("nothing is hidden behind a toggle — the full list is in the control",
     !/stageToggle|stageList|businessList/.test(js) && !/id="stageList"/.test(html));
   /* Every option states how many schemes reach it: beneficiary has 76
      near-duplicate values across 59 schemes, and without a count a label that
      reaches one scheme looks identical to one that reaches sixteen. */
-  t.check("each option carries its scheme count in the label",
+  t.check("each stage option carries its scheme count in the label",
     /o\.textContent=`\$\{v\} \(\$\{c\}\)`/.test(code(js)));
+  t.check("and each beneficiary row does too",
+    /<span class="pick-count">\(\$\{c\}\)<\/span>/.test(code(js)));
   t.check("the .value stays the bare dataset string, which is what the matcher compares",
-    /o\.value=v;/.test(code(js)));
+    /o\.value=v;/.test(code(js)) && /data-beneficiary="\$\{esc\(v\)\}"/.test(code(js)));
   /* Regression: esc() was applied to a textContent assignment, so the entities
      were shown to the user — the stage option read "R&amp;D (3)". esc() is for
-     building HTML strings; a text node is already inert. */
+     building HTML strings; a text node is already inert. The rows are built as
+     an HTML string, so theirs does need it. */
   t.check("option text is not escaped a second time",
     !/o\.textContent=`\$\{esc\(/.test(code(js)));
+  /* esc() for the HTML, then esc(escJs()) for the value inside the inline
+     handler: that string is a JS string inside an HTML attribute, so it needs
+     both, in that order. escJs alone leaves a double quote free to close the
+     attribute. See the note on escJs in util.js. */
+  t.check("but the row names, which are built as HTML, are escaped",
+    /\$\{esc\(v\)\} <span class="pick-count">/.test(code(js)) &&
+    /onchange="toggleBeneficiary\('\$\{esc\(escJs\(v\)\)\}'\)"/.test(code(js)));
+  t.check("every inline handler built from a dataset value is escaped the same way, not just this one",
+    (code(js).match(/(?:onclick|onchange)="[a-zA-Z]+\('\$\{esc\(/g) || []).length === 3 &&
+    !/(?:onclick|onchange)="[a-zA-Z]+\('\$\{escJs\(/.test(code(js)) &&
+    (code(js).match(/esc\(escJs\(/g) || []).length === 3,
+    (code(js).match(/(?:onclick|onchange)="[^"]{0,60}/g) || []).join("\n     "));
+  /* Checked against the data rather than assumed: this suite reads the dataset
+     as text, so the three vocabularies that reach an inline handler are pulled
+     straight out of their array literals. The rest of the file is full of prose
+     and URLs with apostrophes in them, so a whole-file scan would prove nothing. */
+  {
+    const raw = fs.readFileSync(path.join(ROOT, "data/schemes.js"), "utf8");
+    const values = ["target_beneficiaries", "sectors", "startup_stages"].flatMap(f =>
+      [...raw.matchAll(new RegExp('"' + f + '"\\s*:\\s*\\[([^\\]]*)\\]', "g"))]
+        .flatMap(m => [...m[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(x => JSON.parse('"' + x[1] + '"'))));
+    const risky = [...new Set(values)].filter(v => /["'\\<>]/.test(v));
+    t.check("and the data happens not to need it — no vocabulary value holds a quote or a backslash",
+      values.length > 50 && risky.length === 0,
+      risky.length ? "escaping the handler is load-bearing: " + risky.slice(0, 4).join(" | ")
+        : values.length + " vocabulary values, so esc(escJs()) above is belt-and-braces, not a live fix");
+  }
   /* The fuzzy resolver is still underneath, and still used. It is what a
      restored value or a saved profile goes through. */
   t.check("the fuzzy resolver stays wired in for the single-select stage field",
     /resolveAgainst\(stageRaw, ALL_STAGES\)/.test(js));
-  t.check("the multi-select needs no resolver: every option is a dataset value",
+  t.check("the picker needs no resolver: every row is a dataset value",
     !/resolveAgainst\(biz/.test(code(js)));
   /* Dead code left behind by the free-text version. */
   /* Against code(js), not js: the names survive in the comments explaining
@@ -435,62 +480,192 @@ t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT"
     !/closest\("\.combo"\)/.test(code(js)));
   t.check("removed: resetForm no longer closes a panel that cannot exist",
     !/function resetForm\(\)\{[\s\S]*?closeComboPanel/.test(code(js)));
-  t.check("the select styling already in place covers these two fields",
+  t.check("the select styling already in place covers the stage field",
     /\.field input,\.field select\{/.test(css) && /\.field input:focus,\.field select:focus\{/.test(css));
+  t.check("and the beneficiary field is styled by the same rules as the sector field, not its own",
+    /<button type="button" class="select-like" id="businessPickerBtn"/.test(html) &&
+    /class="picker-panel" id="businessPanel"/.test(html) &&
+    /class="picker-panel" id="sectorPanel"/.test(html));
+  t.check("one panel class for both, not a class named for one of the two fields",
+    /\.picker-panel\{/.test(css) && !/\.sector-panel\{/.test(css) && !/\.business-panel\{/.test(css));
 }
 
-/* ---------- Business / Beneficiary Type is a multiple select ---------- */
-t.step("Beneficiary Type takes several picks, and the state is visible and clearable");
+t.step("Beneficiary Type expands, and several picks are kept and visible");
 {
-  t.check("the markup declares multiple on the beneficiary field only",
-    /<select id="business" multiple/.test(html) && !/<select id="stage" multiple/.test(html) &&
-    !/<select id="state" multiple/.test(html));
-  /* A multi-select has no meaningful placeholder: there is no "no selection"
-     state to represent, so an empty-valued option can only be picked by accident
-     and then matched against nothing. */
-  t.check("no placeholder option, so an empty value cannot be selected",
-    !/<select id="business"[^>]*>\s*<option/.test(html));
-  /* Default size for <select multiple> is 4 rows — a peephole into 76 options. */
-  t.check("a row count is set, because the browser default is 4",
-    /<select id="business" multiple size="[6-9]/.test(html));
-  /* Deliberately NOT full width. The form is a 2-column grid, and there are an
-     even number of half-width fields; forcing this one to span 1/-1 would push
-     it onto a fresh row and leave an empty cell next to Business Stage. The
-     widest label is ~30 characters, so a half column is ample for a list box. */
-  t.check("it stays a normal grid cell, so the two-column form has no empty cell",
-    !/class="field field-multi"/.test(html) && !/\.field-multi\{/.test(css) &&
-    /class="field"><label for="business"/.test(html));
-  /* selectedIndex = 0 on a multi-select selects the first option and LEAVES the
-     rest selected, so the obvious reset would have kept every pick. */
-  t.check("resetForm clears a multi-select with -1, not 0",
-    /e\.selectedIndex\s*=\s*e\.multiple\s*\?\s*-1\s*:\s*0/.test(code(js)));
-  t.check("there is no other place resetting selects that would miss the -1 case",
-    !/querySelectorAll\("#find select"\)\.forEach\(e=>e\.selectedIndex=0\)/.test(code(js)));
-  /* One reader for the selection, so a second one cannot drift from it. */
-  t.check("the selection is read through the options, not .value",
-    /function selectedValues\(el\)\{[\s\S]*?el\.options[\s\S]*?filter\(o=>o\.selected\)/.test(code(js)));
-  t.check("findSchemes uses that reader for the multi-select",
-    /selectedValues\(document\.getElementById\("business"\)\)/.test(code(js)));
-  t.check("the profile carries an array, and no leftover single-value field",
-    /business: bizValues/.test(code(js)) && !/businessValue/.test(code(js)));
+  /* This was <select multiple size="7">. A list box has no expanded state at
+     all, which is why it never collapsed. Worse, on a desktop a plain click
+     REPLACED the selection instead of adding to it unless you held Ctrl — the
+     note had to spell out "Ctrl / Cmd-click", which is not guessable and does
+     not exist on a touch screen, so the same control silently behaved
+     differently by device and the desktop path lost picks. A checkbox per row
+     is the same multi-select semantics with a collapsed state and no modifier. */
+  t.check("no <select multiple> is left on either page, so the trap cannot come back",
+    !/<select[^>]*\smultiple/.test(html) && !/<select[^>]*\smultiple/.test(fs.readFileSync("compare.html", "utf8")));
+  t.check("the control is a button that owns a panel, so it has a collapsed state",
+    /<button[^>]*id="businessPickerBtn"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(html));
+  t.check("and the panel ships closed, with a rule that makes hidden work on a div",
+    /class="picker-panel" id="businessPanel" hidden/.test(html) &&
+    /\.picker-panel\[hidden\]\{display:none\}/.test(css));
+  t.check("aria-expanded is kept in step with the panel, for a screen reader",
+    /function syncBusinessPanel\(\)\{[\s\S]*?btn\.setAttribute\("aria-expanded", String\(businessPanelOpen\)\)/.test(code(js)));
+  t.check("the list is a labelled group of checkboxes, so a click always toggles",
+    /<div class="pick-list" id="businessPicks" role="group" aria-labelledby="businessPicksLabel">/.test(html) &&
+    /<label id="businessPicksLabel">/.test(html));
+  t.check("each row wraps its own checkbox in the label, so there is no id to get wrong 76 times",
+    /<label class="pick-row" data-beneficiary="\$\{esc\(v\)\}" data-count="\$\{c\}">[\s\S]*?type="checkbox"[\s\S]*?<\/label>/.test(code(js)));
+  t.check("the box is styled as one, and the list as a scroller rather than a list box",
+    /\.pick-row input\{[^}]*accent-color/.test(css) && /\.pick-list\{[^}]*overflow:auto/.test(css) &&
+    !/\.field select\[multiple\]/.test(css));
+  /* "The two fields should look alike" is a claim about six declarations in two
+     different rules, and prose claiming it is not a check. Compared value by
+     value, so a one-sided tweak (a rounder border on the button, say) fails
+     here rather than showing up as one field subtly taller than its neighbour. */
+  {
+    const decls = (selector) => {
+      const rule = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+        .find(m => m[1].trim().replace(/^\/\*[\s\S]*?\*\/\s*/, "").trim() === selector);
+      if (!rule) return null;
+      return Object.fromEntries(rule[2].split(";").map(d => d.split(":")).filter(p => p.length === 2)
+        .map(([p, v]) => [p.trim(), v.trim()]));
+    };
+    const select = decls(".field input,.field select");
+    const like = decls(".select-like");
+    const BOX = ["border", "padding", "border-radius", "background", "color", "width"];
+    /* A property absent from BOTH maps would compare undefined === undefined and
+       pass, so an absent property counts as drift rather than as agreement. */
+    const drift = !select || !like ? ["a rule is missing"]
+      : BOX.filter(p => select[p] === undefined || like[p] === undefined || select[p] !== like[p])
+        .map(p => p + ": select " + select[p] + " vs button " + like[p]);
+    t.check("its closed box is the same box as the State / UT select, declaration for declaration",
+      drift.length === 0,
+      drift.join("; "));
+    /* The group rule alone is not enough: a later bare `select{}` or
+       `.select-like{}` setting font-family would win the cascade and put a
+       serif letterform in one field and a sans one in its neighbour, while the
+       rule above still read as present. */
+    const GROUP = "button,input,select";
+    const loneFont = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+      .map(m => [m[1].trim(), m[2]])
+      .filter(([sel]) => sel !== GROUP && /(^|[\s,>])(select|button)\b|\.select-like/.test(sel))
+      .filter(([, body]) => /(^|;)\s*font(-family)?\s*:/.test(body))
+      .map(([sel]) => sel);
+    t.check("and it inherits the same font, so it cannot read as a button next to a select",
+      /button\s*,\s*input\s*,\s*select\s*\{\s*font:inherit\s*\}/.test(css.replace(/\s+/g, " ")) &&
+      loneFont.length === 0,
+      loneFont.length ? "a later rule sets the font on one of them: " + loneFont.join(" | ") : "");
+  }
+  /* One source of truth. The tick in the list is derived from the Set on every
+     render, so the list and the profile cannot drift apart — which is the
+     failure the old <select> made possible, where the two were separate
+     sources of truth kept in step by a change listener. */
+  t.check("the Set is the selection, declared once",
+    /let eligBeneficiaries = new Set\(\)/.test(js));
+  /* The tick is set in one function, from the Set, on the input the page can
+     read back — not baked into the row markup. Re-rendering all 76 rows on every
+     click would destroy the checkbox whose onchange had just fired, and with it
+     the keyboard focus, so tabbing down the list would restart at the top. */
+  t.check("the built rows carry no tick at all, so a stale one cannot be baked in",
+    /<label class="pick-row" data-/.test(code(js)) &&
+    !/class="pick-row\$\{/.test(code(js)) && !/type="checkbox"\$\{eligBeneficiaries/.test(code(js)));
+  t.check("one function sets every tick, reading the Set — the row's class and its box together",
+    /function syncBusinessTicks\(\)\{[\s\S]*?const on=eligBeneficiaries\.has\(row\.dataset\.beneficiary\);[\s\S]*?classList\.toggle\("on", on\)[\s\S]*?\.checked=on/.test(code(js)));
+  /* Bounded to the function body on purpose: an unbounded [\s\S]*? would scan the
+     rest of the file and find resetForm's legitimate render call. */
+  t.check("ticking re-syncs the list and never rebuilds it",
+    /function toggleBeneficiary\(v\)\{[^}]*syncBusinessTicks\(\);/.test(code(js)) &&
+    !/renderBeneficiaryPicks/.test((code(js).match(/function toggleBeneficiary\(v\)\{[^}]*\}/) || [""])[0]));
+  /* Counting beats naming. A blocklist of the three variables that used to hold
+     this selection passes the moment a fourth appears, which is the only thing
+     this check is for. An empty new Set() is a selection someone mutates; a new
+     Set(x) is a count derived from the data, so the two are told apart by their
+     argument rather than by their name. There is one per multi-select field. */
+  t.check("and there is no second variable holding the same selection",
+    (code(js).match(/new Set\(\)/g) || []).length === 2 &&
+    /let eligSectors = new Set\(\)/.test(code(js)) &&
+    /let eligBeneficiaries = new Set\(\)/.test(code(js)) &&
+    !/businessValue|selectedValues|eligBusiness\b/.test(code(js)),
+    (code(js).match(/new Set\(\)/g) || []).length + " empty Sets in app.js (one per multi-select field)");
+  /* The stronger half: the toggle cannot create a shadow variable, because it
+     assigns nothing at all, and every Set method it calls is called on the Set
+     the matcher reads. Checked on the receiver of each call rather than by
+     looking for a stray name — a name list is what let the first version of
+     this pass a shadow written as `shadow.add(v)`. */
+  t.check("and the toggle can only write to the Set — it assigns nothing, and every Set call is on that Set",
+    (() => {
+      const body = (code(js).match(/function toggleBeneficiary\(v\)\{[^}]*\}/) || [""])[0];
+      const noAssign = !/=/.test(body.replace(/[=!]==|[<>]=/g, ""));   // ==, ===, !=, <=, >= dropped
+      const receivers = [...body.matchAll(/([A-Za-z_$][\w$]*)\s*\.\s*(add|delete|has|clear|addAll)\s*\(/g)].map(m => m[1]);
+      return noAssign &&
+        receivers.length > 0 &&
+        receivers.every(r => r === "eligBeneficiaries") &&
+        /\.add\(v\)/.test(body) && /\.delete\(v\)/.test(body);
+    })(),
+    (() => {
+      const body = (code(js).match(/function toggleBeneficiary\(v\)\{[^}]*\}/) || [""])[0];
+      return "assigns: " + (/=/.test(body.replace(/[=!]==|[<>]=/g, "")) ? "yes" : "no") +
+        ", Set calls on: " + [...new Set([...body.matchAll(/([A-Za-z_$][\w$]*)\s*\.\s*(?:add|delete|has|clear)\s*\(/g)].map(m => m[1]))].join(", ");
+    })());
+  t.check("findSchemes reads the same Set, not a control's .value",
+    /const bizValues=\[\.\.\.eligBeneficiaries\]/.test(code(js)));
+  t.check("the profile carries an array",
+    /business: bizValues/.test(code(js)));
   /* A pick gives 20 to a matching scheme and 0 to a non-matching one, so extra
      picks must not be able to push a real match below a weaker one. */
   t.check("scoring credits every picked type the scheme actually lists",
     /const hit=p\.business\.filter\(b=>s\.target_beneficiaries\.some\(x=>closeEnough\(b,x\)\)\)/.test(code(js)));
   t.check("and a second matching pick is worth more than the first alone",
     /score\+=20\+Math\.min\(6,\(hit\.length-1\)\*3\)/.test(code(js)));
-  /* A multi-select's selection is a highlight that scrolls out of sight, and
-     Ctrl / Cmd-click is not guessable. */
-  t.check("the picks are echoed in words under the control",
+  /* 76 values, 74% of which reach a single scheme. A 7-row peephole with no
+     filter was the other half of the problem, so the panel has to be able to
+     search, and a pick must not be able to vanish behind a search. */
+  t.check("the panel has a filter box, wired to a real handler",
+    /id="businessFilter"[^>]*oninput="filterBusinessPicks\(\)"/.test(html) &&
+    /function filterBusinessPicks\(\)\{ applyBusinessPicks\(\); \}/.test(code(js)));
+  t.check("a picked row is never hidden by the filter, so it can always be unticked",
+    /row\.hidden=!\(matches\|\|keep\)/.test(code(js)));
+  t.check("and the count line says so rather than quietly holding a row open",
+    /picked \$\{held===1\?"type is":"types are"\} kept visible/.test(code(js)));
+  t.check("the count line also discloses how much of the list is a one-off",
+    /reach a single scheme each/.test(code(js)));
+  /* A dropdown that only closes on its own button or on Escape is one you have
+     to aim at. Both panels get the same treatment, which the sector field never
+     had. */
+  t.check("Escape closes the panel",
+    /e\.key!=="Escape"[\s\S]*?else if\(businessPanelOpen\) closeBusinessPanel\(\)/.test(code(js)));
+  t.check("a click anywhere outside it closes it too",
+    /addEventListener\("click",function\(e\)\{[\s\S]*?hits\("businessPickerBtn","businessPanel"\)/.test(code(js)));
+  t.check("and the button and the panel are both excluded, or the click that opened it would close it again",
+    /const hits = \(btnId,panelId\) => \{[\s\S]*?btn\.contains\(e\.target\)[\s\S]*?panel\.contains\(e\.target\)/.test(code(js)) &&
+    /!hits\("sectorPickerBtn","sectorPanel"\)\) closeSectorPanel\(\)/.test(code(js)));
+  t.check("the picks are echoed in words under the control, and the button points at that line",
     /id="businessPicked"/.test(html) && /aria-live="polite"/.test(html) &&
     /aria-describedby="businessPicked"/.test(html));
   t.check("there is a Clear control, so a pick need not be hunted in 76 rows",
     /function clearBusinessPicks\(/.test(code(js)) && /onclick="clearBusinessPicks\(\)"/.test(js));
-  t.check("the note and the reset both re-sync, or they would go stale",
-    /"change",\s*syncBusinessPicks/.test(code(js)) &&
-    /resetForm\(\)\{[\s\S]*?syncBusinessPicks\(\)/.test(code(js)));
+  /* Every path that changes the Set has to re-sync the note, or it goes stale.
+     The old code could lean on a "change" listener; there is no single event
+     any more, so each mutator is pinned. */
+  t.check("toggling a pick re-syncs the button, the list and the note",
+    /function toggleBeneficiary\(v\)\{[\s\S]*?syncBusinessPickerLabel\(\);\s*\n\s*syncBusinessPicks\(\);/.test(code(js)));
+  t.check("clearing re-syncs them too",
+    /function clearBusinessPicks\(\)\{[\s\S]*?syncBusinessPicks\(\);/.test(code(js)));
+  t.check("and so does the reset",
+    /function resetForm\(\)\{[\s\S]*?syncBusinessPicks\(\)/.test(code(js)));
+  t.check("the closed button names the top ticked row, so it agrees with the list order",
+    /\[...eligBeneficiaries\]\.sort\(\(a,b\)=>a\.localeCompare\(b\)\)/.test(code(js)));
   t.check("the label says several may be chosen",
     /Business \/ Beneficiary Type <span class="ref-tag">\(select one or more\)<\/span>/.test(html));
+  /* Removed with the list box, and pinned so none of it creeps back. */
+  t.check("removed: the option-list reader a multi-select needed",
+    !/function selectedValues/.test(code(js)) && !/selectedValues\(/.test(code(js)));
+  t.check("removed: the -1 reset branch, which only a multi-select needed",
+    !/selectedIndex\s*=\s*e\.multiple/.test(code(js)) && !/e\.multiple/.test(code(js)));
+  t.check("removed: the multi-select CSS",
+    !/select\[multiple\]/.test(css));
+  t.check("removed: the Ctrl-click wording, which the reason it was there for no longer applies",
+    !/Ctrl/.test(html) && !/Cmd-click/.test(js));
+  t.check("removed: the wide-cell class the list box never needed",
+    !/field-multi/.test(html) && !/\.field-multi\{/.test(css));
 }
 
 t.step("the header is navy with a gold rule, and nothing on it is invisible");
@@ -763,7 +938,7 @@ t.step("sections alternate navy and white down the page");
      it, rather than listing the two that broke. */
   {
     const CARDS = ["step", "feature", "stat-card", "explore-tile", "category",
-      "scheme-card", "find-box", "searchbar", "filters-panel"];
+      "scheme-card", "find-box", "searchbar", "filters-panel", "pick-list"];
     /* A card is white if some rule paints it white, and carries ink if some
        rule sets its colour. Both are decided by parsing the stylesheet into
        (selectors, declarations) pairs rather than by regexing the file: a card
@@ -871,6 +1046,12 @@ t.step("every text/background pair on the new surfaces clears WCAG AA");
     ["navy band fine print", "#9db2d0", NAVY, 4.5, /\.band-navy \.disclaimer/],
     ["card body copy on white", "#607089", WHITE, 4.5, /\.step p,\.feature p\{[^}]*color:var\(--muted\)/],
     ["the reference note", "#5f7089", NOTE, 4.5, /\.ref-note\{[^}]*color:#5f7089/],
+    /* The two surfaces the beneficiary picker added. The form band is navy, so a
+       white list inside it is the same white-on-white case the scan walks. */
+    ["picker panel copy", "#10243d", "#fbfdff", 4.5, /\.picker-panel\{[^}]*color:var\(--ink\)/],
+    ["picker row name", "#10243d", "#ffffff", 4.5, /\.pick-list\{[^}]*color:var\(--ink\)/],
+    ["picker row scheme count", "#607089", "#ffffff", 4.5, /\.pick-count\{[^}]*color:var\(--muted\)/],
+    ["a ticked picker row", "#10243d", "#e8f2ff", 4.5, /\.pick-row\.on\{background:#e8f2ff\}/],
   ];
   pairs.forEach(([label, fg, bg, need, inCss]) => {
     const r = ratio(fg, bg);

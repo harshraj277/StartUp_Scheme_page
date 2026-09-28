@@ -148,48 +148,80 @@ that bit are pinned down by contract tests:
 - The results grid is 5-up at ≥1800px, 4-up at 1440–1799px, 3-up at
   1081–1439px, 2-up at 761–1080px, 1-up below. Four columns across a 27" screen
   left ~600px cards, so the extra width buys a fifth column instead.
-- Business Stage and Business / Beneficiary Type are plain `<select>` elements,
-  like State / UT and the advanced filters. They were `<input list>` + `<datalist>`,
-  which is why they looked like text boxes: a browser only opens a datalist popup
-  once you have typed a character and draws no arrow to invite you. All of it is
-  in the control, so there is nothing to expand first.
-  - Each option carries its scheme count — `Early Stage (45)`, `Pilot (1)`. There
-    are 76 beneficiary values across 59 schemes and many are near-duplicates, so
-    without a count a label reaching one scheme looks identical to "Startups (16)".
-  - The option `.value` is the bare dataset string; the count is only in the
-    label, which is what the matcher compares. Labels are set with
-    `textContent`, never `esc()` — `esc()` is for building HTML strings, and
+- Business Stage and Business / Beneficiary Type were both `<input list>` +
+  `<datalist>`, which is why they looked like text boxes: a browser only opens a
+  datalist popup once you have typed a character and draws no arrow to invite you.
+  They are two different controls now, because a multi-select and a single-select
+  cannot both be "a dropdown like State / UT".
+  - **Business Stage is a plain `<select>`**, like State / UT and the advanced
+    filters. One answer, so one line and a native dropdown. Each option carries its
+    scheme count — `Early Stage (45)`, `Pilot (1)` — and the `.value` is the bare
+    dataset string, which is what the matcher compares. Labels are set with
+    `textContent`, never `esc()`: `esc()` is for building HTML strings, and
     applying it to a text node displayed the entities themselves, so the stage
     option read `R&amp;D (3)` instead of `R&D (3)`.
-- **Business / Beneficiary Type is a `<select multiple>`**; Business Stage is not.
-  - `size="7"`, because the browser's default for a multi-select is 4 rows, which
-    is a peephole into 76 options. Tighter padding than a single-line field.
-  - It has **no placeholder option**, unlike every other select on the page. On a
-    multi-select there is no single "no value" state to represent, so an
-    empty-valued option can only be picked by accident and then matches nothing.
-  - Selection is read through `selectedValues()` — every option with
-    `.selected` — because on a multi-select `.value` returns only the first pick.
-    One reader, so no second copy can drift.
-  - The picks are echoed in words under the control with a **Clear** button. A
-    multi-select's state is a highlight that scrolls out of sight, picking
-    several needs Ctrl/Cmd-click which is not guessable, and deselecting one of
-    five would otherwise mean hunting for it in a list of 76.
-  - `resetForm()` clears it with `selectedIndex = -1`. `= 0` is the obvious
-    thing to write and is **wrong** here: on a multi-select it selects the first
-    option and leaves every other pick in place, so Reset would have kept them
-    all and added one.
+  - **Business / Beneficiary Type is a button and a checkbox panel**, the same
+    shape as the Industry / Sector field below it. It needs several answers, and a
+    `<select multiple>` cannot give them a real collapsed state, so it is the one
+    multi-pick field that is not a list box. The reasoning, because each part was a
+    separate failure:
+    - `<select multiple size="7">` **never collapsed**. Any `size` above 1 renders
+      as a permanently open list box, so the control had no expanded state at all —
+      the original ask was "similar to State / UT, control and expand", and a native
+      multi-select cannot satisfy it.
+    - On a desktop, **a plain click replaced the selection** instead of adding to
+      it unless Ctrl/Cmd was held. The old note had to spell out "Ctrl / Cmd-click",
+      which is not guessable and does not exist on a touch screen, so the same
+      control silently behaved differently by device and the desktop path lost picks
+      without saying so. A checkbox per row is the same multi-select semantics with
+      no modifier at all: a click always toggles.
+    - 76 values, **74% of which reach exactly one scheme**, in a 7-row window with
+      no filter, and the near-duplicates sit alphabetically adjacent
+      ("Biotech innovators" (2) next to "Biotech companies/startups" (1)). So the
+      panel filters, and its count line says how much of the list is a one-off.
+    - Two controls in one form both labelled "(select one or more)" have to behave
+      the same way, so the panel class is `.picker-panel`, shared with the sector
+      field. It was `.sector-panel`, and a class named for one field is a class
+      waiting to be applied wrongly.
+  - `eligBeneficiaries`, a `Set`, is the selection. The tick in the list is
+    **derived** from it on every render, so the list and the profile are one fact
+    read twice and cannot drift. The old `<select>` kept them as separate sources
+    of truth held in step by a `change` listener; every mutator now re-syncs
+    explicitly and each is pinned.
+  - **A picked row is never hidden by the filter.** If searching could make your
+    own pick vanish you would lose track of what you had chosen and have no way to
+    untick it without clearing the filter and searching again. The count line says
+    when it is holding a pick open, rather than quietly doing it.
+  - The picks are echoed in words under the control, with a **Clear** button, and
+    the closed button names the **top ticked row of the list** rather than whichever
+    was clicked first — the list is alphabetical, so anything else would disagree
+    with what you just looked at.
+  - It opens and closes on the button, on **Escape**, and on a click anywhere
+    outside it. The outside-click close is a document listener and it excludes both
+    the button and the panel, or the click that opened the picker would close it
+    again on the way up. **The sector field never had this** and got it at the same
+    time; both are driven through `document.dispatch` in the e2e suite.
   - Scoring mirrors the sector field: 20 points for a match, +3 for each further
     picked type the scheme actually lists, capped at +6. Without that, a scheme
     listing two of your picks could rank below one listing a single pick, so
     adding a second selection could only push a real match down.
   - It stays a normal grid cell. The form is a 2-column grid with an even number
     of half-width fields; spanning this one `1/-1` would push it onto a new row
-    and leave an empty cell beside Business Stage.
+    and leave an empty cell beside Business Stage. The panel is a half column
+    wide on desktop and the full width below the one-column breakpoint.
+  - The white list sits inside the navy `find` band, so `.pick-list` and
+    `.picker-panel` declare their own ink rather than trusting `.find-box` two
+    levels up. `.pick-list` is in the contract suite's white-on-white band scan for
+    the same reason: that inheritance is what would turn every row invisible the day
+    the panel is moved out of the form card.
 - A `<select>` cannot hold a value outside the dataset, so the "not a dataset
   value" hint under each field went with the free-text inputs, as did the two
   empty-result tips about it. `resolveAgainst()` stays wired in for Business
-  Stage; the multi-select needs no fuzzy pass because every option it can hold is
-  a dataset value.
+  Stage; the picker needs no fuzzy pass because every row it can hold is a dataset
+  value.
+- `resetForm()` clears the picker's `Set` and re-renders, rather than unticking
+  boxes one at a time. The tick is derived from the `Set` at render time, so
+  rebuilding is the only way to be sure the boxes and the profile agree.
 - The compare table caps columns at `max-width:360px` with `overflow-wrap`. The
   cell text is deliberately untruncated, so without a cap one long eligibility
   paragraph stretches its column to several thousand pixels and pushes the other
@@ -316,16 +348,16 @@ is verifiable against the source text rather than taken on trust.
 - Matching is guidance only — always verify eligibility on the official
   source linked on each scheme card.
 - Business Stage is a single-choice dropdown and Business / Beneficiary Type is a
-  multi-select, both populated from the dataset, so neither can hold a value that
-  is not a real one. A trade-off: the dataset has no women-specific, age-specific
-  or turnover-specific beneficiary value at all, so a founder who is one of those
-  has no option to pick and no way to say so — the fields cannot express what the
-  data does not contain.
-- Beneficiary Type is 76 near-duplicate labels for 59 schemes, over 20% of them
-  reaching a single scheme ("Biotech startups", "Biotech startups indirectly",
+  multi-pick panel, both populated from the dataset, so neither can hold a value
+  that is not a real one. A trade-off: the dataset has no women-specific,
+  age-specific or turnover-specific beneficiary value at all, so a founder who is
+  one of those has no option to pick and no way to say so — the fields cannot
+  express what the data does not contain.
+- Beneficiary Type is 76 near-duplicate labels for 59 schemes, **74% of them
+  reaching a single scheme** ("Biotech startups", "Biotech startups indirectly",
   "Biotechnology startups", "Biotech companies/startups" are four rows). The
-  per-option scheme counts exist to make that visible rather than to hide it.
-  Collapsing it is a data-cleaning problem, not a UI one.
+  per-row scheme counts and the filter box exist to make that visible rather than to
+  hide it; the near-duplicates themselves are a data-cleaning problem, not a UI one.
 - Search is token-AND across name, ministry, scheme type, objective, sectors,
   tags, benefit types, beneficiaries and body text, so `loan for startup` and
   `msme loan` both work.

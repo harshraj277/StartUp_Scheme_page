@@ -180,15 +180,31 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .field label{display:block;font-weight:800;font-size:.88rem;margin-bottom:7px}
 .field input,.field select{width:100%;border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink);outline:none}
 .field input:focus,.field select:focus{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
-/* A multi-select is a list box, not a one-line field. The 12px padding of the
-   shared rule is a one-line field's padding: on a 7-row list it wastes a third
-   of the box, so it is tightened here and the rows are given room to breathe. */
-.field select[multiple]{padding:5px;min-height:196px;cursor:pointer}
-.field select[multiple] option{padding:5px 8px;border-radius:6px}
-.field select[multiple] option:checked{background:#e8f2ff;font-weight:750}
-/* The state of a multi-select is a highlight that scrolls out of view, and
-   Ctrl / Cmd-click is not guessable, so the picks are spelled out underneath
-   with a way to drop all of them. */
+/* The checkbox list behind the Business / Beneficiary Type button.
+   It was a <select multiple size="7">, which is a list box with no expanded
+   state: it never collapsed, and on a desktop a plain click REPLACED the
+   selection rather than adding to it unless you held Ctrl. Touch devices have
+   no Ctrl, so the same control silently behaved differently by device and the
+   desktop path lost picks without saying so. A checkbox per row is the same
+   multi-select semantics with none of that: a click always toggles. */
+/* The list paints its own white and the band around it is navy, so it declares
+   its own ink rather than trusting .find-box two levels up: that inheritance is
+   what would otherwise turn every row into white-on-white the day the panel is
+   moved out of the form card. */
+.pick-list{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:4px}
+.pick-row{display:flex;align-items:flex-start;gap:9px;padding:7px 9px;border-radius:8px;cursor:pointer;line-height:1.42}
+/* Labels run to 47 characters ("SEBI-registered Category I and Category II AIFs"),
+   so the row wraps rather than truncating — the scheme name is the thing being
+   chosen and half of it is worse than none. align-items:flex-start keeps the
+   checkbox beside the first line instead of floating to the vertical middle. */
+.pick-row:hover{background:#f2f7fd}
+.pick-row input{flex:none;width:15px;height:15px;margin:3px 0 0;accent-color:var(--navy2);cursor:pointer}
+.pick-row .pick-name{flex:1;min-width:0;font-size:.85rem}
+.pick-count{color:var(--muted);font-weight:700;white-space:nowrap}
+.pick-row.on{background:#e8f2ff}
+.pick-row:focus-within{outline:2px solid #8ba8c5;outline-offset:-2px}
+/* The state of a multi-select is easy to lose once the list is a scroller, so
+   the picks are spelled out underneath with a way to drop all of them. */
 .picked-note{margin:9px 0 0;font-size:.8rem;line-height:1.5;color:var(--muted)}
 .link-btn{background:none;border:0;padding:0;color:#26659d;font:inherit;font-weight:800;
   text-decoration:underline;cursor:pointer}
@@ -202,8 +218,11 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .select-like.has-value{font-weight:750}
 .select-caret{flex:none;color:var(--muted);font-size:.8rem;transition:transform .15s}
 .select-like.open .select-caret{transform:rotate(180deg)}
-.sector-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff}
-.sector-panel[hidden]{display:none}
+/* Shared by the two "(select one or more)" fields, so they open and close the
+   same way. Renamed from .sector-panel when the beneficiary field joined it —
+   a class named for one field is a class waiting to be applied wrongly. */
+.picker-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff;color:var(--ink)}
+.picker-panel[hidden]{display:none}
 .full{grid-column:1/-1}.chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#f7f9fc;border-radius:999px;padding:8px 12px;font-size:.82rem;font-weight:750}
 .chip.active{background:#e8f2ff;border-color:#8fb5dc;color:var(--navy)}
