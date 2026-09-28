@@ -71,10 +71,19 @@ The page reads as a stack of bands rather than one long light page.
 - **The Devanagari line is ours, not a copy.** `आपके स्टार्टअप के लिए सरकारी
   योजनाएँ`, in `--gold-soft`, `lang="hi"` — it echoes the bilingual wordmark
   already in the navbar rather than repeating it.
-- **The mark is a white disc, not a cropped circle.** `img/logo.webp` is an
-  opaque square WebP with no alpha channel, so `border-radius:50%` on the image
-  would slice the artwork. The disc is on `.hero-mark`; the image sits inside it
-  with `object-fit:contain` and keeps its own rectangle. The image is
+- **The mark is the logo cropped to a circle, filled edge to edge.**
+  `img/logo.webp` is an opaque square WebP with no alpha channel, so the disc
+  does the clipping: `overflow:hidden` on `.hero-mark` plus `border-radius:50%`
+  on the image, and `object-fit:cover` to fill. That replaced the old
+  `padding:9%` + `object-fit:contain`, which left the square sitting in a
+  larger empty white circle rather than matching it. `background:#fff` stays as
+  the colour behind the artwork before it loads.
+- **The mark is big, and the ring around it scales with it.** It grew from
+  `clamp(190px,19vw,320px)` to `clamp(210px,26vw,430px)`, because at a 320px
+  ceiling it read as a token tile beside the copy instead of as the hero's
+  crest. 430px still fits the mark column, which is about 612px on a 1920px
+  screen. The dashed ring moved from a fixed `inset:-30px` to `inset:-9%` so
+  the gap around the disc holds its proportion at any size. The image is
   `alt="" aria-hidden="true"` — the site's name is in the navbar directly above.
 - **The hero is two columns** — copy left, mark right — and collapses to one at
   **920px**, where the mark is hidden rather than squeezed. `.hero-copy` also

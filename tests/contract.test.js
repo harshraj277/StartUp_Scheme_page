@@ -957,12 +957,21 @@ t.step("the hero is navy with a gold call to action, and the logo comes back");
     !/स्वास्थ्य/.test(html));
   t.check("the eyebrow pill is outlined in gold, not a pale chip lost on navy",
     /\.badge\{[^}]*rgba\(216,165,44,\.42\)/.test(css) && /\.badge\{[^}]*color:var\(--gold-soft\)/.test(css));
-  /* The mark is a white disc holding the logo, not the logo cropped to a circle:
-     img/logo.webp is an opaque square, so a radius on the image would slice the
-     artwork. */
-  t.check("the mark frames the logo in a white disc rather than cropping it",
-    /\.hero-mark\{[^}]*background:#fff/.test(css) && /\.hero-mark img\{[^}]*object-fit:contain/.test(css) &&
-    !/\.hero-mark img\{[^}]*border-radius/.test(css));
+  /* The mark is the logo cropped to a circle and filled edge to edge. img/logo.webp
+     is an opaque square, so the disc has to do the clipping — that is what makes
+     the artwork match the circle instead of sitting in it. Both halves are pinned
+     because either one alone still leaves a square corner sticking out. */
+  t.check("the mark fills its circle, clipping the square artwork to the disc",
+    /\.hero-mark\{[^}]*background:#fff/.test(css) && /\.hero-mark\{[^}]*border-radius:50%/.test(css) &&
+    /\.hero-mark\{[^}]*overflow:hidden/.test(css) && /\.hero-mark img\{[^}]*object-fit:cover/.test(css) &&
+    /\.hero-mark img\{[^}]*border-radius:50%/.test(css));
+  /* And it is sized to carry the hero, not left as the 320px token tile it was. */
+  t.check("and it is scaled up from the old 190/19vw/320px tile",
+    /\.hero-mark\{[^}]*width:clamp\(210px,26vw,430px\)/.test(css));
+  /* The dashed ring is -9% rather than a fixed -30px, so it keeps the same gap
+     around the disc instead of being swallowed as the mark grows. */
+  t.check("the ring around the mark is a percentage, so it scales with it",
+    /\.hero-mark::after\{[^}]*inset:-9%/.test(css) && !/\.hero-mark::after\{[^}]*inset:-30px/.test(css));
   t.check("it is the supplied logo, sized so it cannot shift the layout",
     /<div class="hero-mark">\s*<img src="img\/logo\.webp" width="300" height="300" alt="" aria-hidden="true">/.test(html));
   t.check("and decorative, because the site's name is in the navbar right above it",

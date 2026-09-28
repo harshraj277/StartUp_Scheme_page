@@ -104,15 +104,20 @@ h1{font-size:clamp(2.15rem,4.6vw,3.5rem);line-height:1.06;letter-spacing:-.03em;
 .btn-ghost:hover{border-color:var(--gold);color:var(--gold-soft);background:rgba(216,165,44,.10)}
 .trust{display:flex;gap:10px 20px;flex-wrap:wrap;color:#a9bcd9;font-size:.86rem;font-weight:650}
 .trust span{display:flex;align-items:center;gap:6px}
-/* The mark sits inside a white disc rather than being cropped to a circle:
-   img/logo.webp is an opaque square WebP, so a border-radius on the image itself
-   would slice the artwork instead of framing it. */
-.hero-mark{justify-self:center;position:relative;width:clamp(190px,19vw,320px);aspect-ratio:1;
- border-radius:50%;background:#fff;padding:9%;display:grid;place-items:center;
+/* The mark is the logo cropped to a circle and filled edge to edge, not a square
+   floating in a larger empty white disc. img/logo.webp is an opaque square WebP
+   with no alpha channel, so the disc does the clipping — overflow:hidden there
+   cuts the corners, and the radius on the image is what makes the artwork match
+   the circle it sits in. background:#fff stays as the colour behind the artwork
+   before it loads. It also grew: at 320px max it read as a token tile beside the
+   copy rather than as the hero's crest, and 430px still fits the 0.68fr column,
+   which is about 612px on a 1920px screen. */
+.hero-mark{justify-self:center;position:relative;width:clamp(210px,26vw,430px);aspect-ratio:1;
+ border-radius:50%;background:#fff;overflow:hidden;
  box-shadow:0 0 0 2px var(--gold),0 0 0 12px rgba(216,165,44,.18),0 26px 60px rgba(3,14,30,.45)}
-.hero-mark::after{content:"";position:absolute;inset:-30px;border-radius:50%;
+.hero-mark::after{content:"";position:absolute;inset:-9%;border-radius:50%;
  border:1.5px dashed rgba(216,165,44,.5);animation:ring-spin 64s linear infinite reverse;pointer-events:none}
-.hero-mark img{width:100%;height:100%;object-fit:contain;display:block}
+.hero-mark img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 @media(prefers-reduced-motion:reduce){.hero-mark::after{animation:none}}
 @media(max-width:920px){
  .hero-grid{grid-template-columns:1fr;gap:2rem}
