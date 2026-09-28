@@ -198,12 +198,12 @@ function fillSelect(id, entries, {sortAlpha=false}={}){
     el.appendChild(o);
   });
 }
-/* Business Stage is a plain <select>. It used to be a free-text input with a
-   <datalist>, which is why it looked like a text box: browsers only open a
-   datalist popup once you have typed a character, and draw no arrow to invite
-   you. Business / Beneficiary Type is a button and a checkbox list for the same
-   reason plus one more: 76 values, 74% of which reach a single scheme, and a
-   list box that can only be added to with Ctrl-click. */
+/* Business Stage is a plain <select>, exactly like State / UT. It used to be a
+   free-text input with a <datalist>, which is why it looked like a text box:
+   browsers only open a datalist popup once you have typed a character, and draw
+   no arrow to invite you. Business / Beneficiary Type is that same dropdown with
+   several answers allowed — the State / UT box, a real collapsed state, and a
+   tick per row so a click always adds to the selection. */
 /* Advanced filters keep only the facets the match form cannot express.
    Sector, stage, beneficiary and support type were removed from here because the
    match form already owns them, and the search box narrows by all four
@@ -235,10 +235,11 @@ function initControls(){
   fillSelect("fMinistry", ministryEntries, {sortAlpha:true});
   fillSelect("fType", typeEntries, {sortAlpha:true});
 
-  /* Every type is offered, none hidden behind a toggle: the filter box is what
-     makes 76 findable, and the count line says how many reach a single scheme
-     so the long tail is not a surprise. The rows are built once; the ticks are
-     synced from the Set, so nothing has to be rebuilt to change them. */
+  /* Every type is offered, none hidden behind a toggle: the filter box inside
+     the dropdown is what makes 76 findable, and the count line at its foot says
+     how many reach a single scheme so the long tail is not a surprise. The rows
+     are built once; the ticks are synced from the Set, so nothing has to be
+     rebuilt to change them. */
   renderBeneficiaryPicks();
   syncBusinessTicks();
   document.getElementById("businessPickerBtn").addEventListener("click", toggleBusinessPanel);
@@ -431,7 +432,7 @@ function syncSectorPickerLabel(){
 }
 function syncSectorPanel(){
   const panel=document.getElementById("sectorPanel");
-  if(panel) panel.hidden=!sectorPanelOpen;
+  if(panel){ panel.hidden=!sectorPanelOpen; panel.classList.toggle("open", sectorPanelOpen); }
   const btn=document.getElementById("sectorPickerBtn");
   if(btn){
     btn.setAttribute("aria-expanded", String(sectorPanelOpen));
@@ -449,10 +450,19 @@ function closeSectorPanel(){
   sectorPanelOpen=false;
   syncSectorPanel();
 }
-/* ---------- Business / Beneficiary Type: button + checkbox list ----------
-   The same shape as the sector field, deliberately. Two controls in one form
-   both labelled "(select one or more)" have to behave the same way, and this
-   one used to be a <select multiple size="7"> sitting permanently open. */
+/* ---------- Business / Beneficiary Type: the State / UT dropdown, with several
+   picks allowed ----------
+   The same box, the same open-and-close, one click from the whole list — and any
+   number of rows can be ticked. The shape is shared with the sector field on
+   purpose: two controls in one form both labelled "(select one or more)" have to
+   behave the same way.
+   It is not a <select multiple>, which is the shape the words "like State / UT,
+   with multiple select" describe most literally. That element is a list box with
+   no expanded state — any size above 1 renders permanently open, so it cannot
+   collapse — and on a desktop a plain click replaces the selection instead of
+   adding to it unless Ctrl/Cmd is held, which does not exist on a touch screen.
+   A tick per row is the same multi-select semantics with a collapsed state and
+   no modifier at all: a click always toggles. */
 let businessPanelOpen = false;
 function renderBeneficiaryPicks(){
   const box=document.getElementById("businessPicks");
@@ -517,11 +527,14 @@ function toggleBeneficiary(v){
   syncBusinessPickerLabel();
   syncBusinessPicks();
 }
-/* Labels run to 47 characters, so the closed button cannot show them all without
-   growing to three lines. It shows the first one truncated and how many others
-   are picked; the note underneath lists every pick in full, and a Clear.
+/* Labels run to 47 characters, so the closed box cannot show them all without
+   growing to three lines. It says how many are picked and names the first one
+   truncated; the note underneath lists every pick in full, and there is a Clear.
+   The count is on the closed box rather than only in the note because, unlike
+   State / UT, this control can hold several answers — a closed multi-select that
+   named one of them would leave you guessing how many you had already ticked.
    Sorted, not click order: the list above is alphabetical, so the name on the
-   closed button has to be the top ticked row of the list you just closed, not
+   closed box has to be the top ticked row of the list you just closed, not
    whichever one you happened to click first. */
 function syncBusinessPickerLabel(){
   const el=document.getElementById("businessPickerLabel");
@@ -529,13 +542,15 @@ function syncBusinessPickerLabel(){
   const names=[...eligBeneficiaries].sort((a,b)=>a.localeCompare(b));
   el.textContent = names.length===0 ? "Select beneficiary types…"
     : names.length===1 ? truncate(names[0],34)
-    : `${truncate(names[0],30)} +${names.length-1} more`;
+    : `${names.length} selected · ${truncate(names[0],26)} +${names.length-1} more`;
   const btn=document.getElementById("businessPickerBtn");
   if(btn) btn.classList.toggle("has-value", names.length>0);
 }
 function syncBusinessPanel(){
   const panel=document.getElementById("businessPanel");
-  if(panel) panel.hidden=!businessPanelOpen;
+  /* .open on the panel as well as on the box: the two are drawn as one control,
+     so the focus tint on the box has to continue into the dropdown's border. */
+  if(panel){ panel.hidden=!businessPanelOpen; panel.classList.toggle("open", businessPanelOpen); }
   const btn=document.getElementById("businessPickerBtn");
   if(btn){
     btn.setAttribute("aria-expanded", String(businessPanelOpen));
@@ -821,7 +836,7 @@ function resetForm(){
 
 /* The list is a scroller, so a tick near the top scrolls out of view while you
    carry on down the 76 rows. The picks are therefore also spelled out in words
-   under the button, with a Clear — unticking one of five otherwise means
+   under the dropdown, with a Clear — unticking one of five otherwise means
    filtering, scrolling and hunting for it again. */
 function syncBusinessPicks(){
   const note=document.getElementById("businessPicked");

@@ -180,29 +180,55 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .field label{display:block;font-weight:800;font-size:.88rem;margin-bottom:7px}
 .field input,.field select{width:100%;border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink);outline:none}
 .field input:focus,.field select:focus{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
-/* The checkbox list behind the Business / Beneficiary Type button.
-   It was a <select multiple size="7">, which is a list box with no expanded
-   state: it never collapsed, and on a desktop a plain click REPLACED the
-   selection rather than adding to it unless you held Ctrl. Touch devices have
-   no Ctrl, so the same control silently behaved differently by device and the
-   desktop path lost picks without saying so. A checkbox per row is the same
-   multi-select semantics with none of that: a click always toggles. */
-/* The list paints its own white and the band around it is navy, so it declares
-   its own ink rather than trusting .find-box two levels up: that inheritance is
-   what would otherwise turn every row into white-on-white the day the panel is
-   moved out of the form card. */
-.pick-list{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:4px}
-.pick-row{display:flex;align-items:flex-start;gap:9px;padding:7px 9px;border-radius:8px;cursor:pointer;line-height:1.42}
-/* Labels run to 47 characters ("SEBI-registered Category I and Category II AIFs"),
-   so the row wraps rather than truncating — the scheme name is the thing being
-   chosen and half of it is worse than none. align-items:flex-start keeps the
-   checkbox beside the first line instead of floating to the vertical middle. */
+/* ---------- Business / Beneficiary Type: the State / UT dropdown, with several
+   picks allowed ----------
+   The field is the State / UT select again — same box, same opening and closing,
+   one click away from the whole list — except that several rows can be chosen at
+   once instead of one. It is not a <select multiple> because a browser draws
+   that as a list box with no expanded state at all: any size above 1 is
+   permanently open, so the control cannot collapse, and on a desktop a plain
+   click REPLACED the selection rather than adding to it unless Ctrl was held.
+   Touch devices have no Ctrl, so the same control silently behaved differently by
+   device and the desktop path lost picks without saying so. A tick per row is
+   the same multi-select semantics with a real collapsed state and no modifier:
+   a click always toggles. */
+/* The closed box is the State / UT select's box, declaration for declaration, with
+   a caret dropped on the right. While it is open the bottom corners square off,
+   because the dropdown below hangs off them — .picker-panel.rows. The soft ring
+   it used to carry is gone: the dropdown now floats over the ring's lower half,
+   and the panel's own drop shadow is what separates the open control from the
+   form underneath it. Keyboard focus is still marked, by the global
+   :focus-visible outline rather than by this ring. */
+/* The type-to-filter row, flat rather than a boxed input: inside a dropdown it is
+   type-ahead on the select above it, not a form field. It is a sibling of the
+   scroller rather than a child of it, which is what actually keeps it in view —
+   it cannot scroll away with the 76 rows below it. position:sticky is
+   reinforcement, not the mechanism: it is a no-op while the row sits above the
+   scroller, and it holds the row if the two are ever nested. */
+.pick-search{position:sticky;top:0;z-index:2;width:100%;border:0;border-bottom:1px solid var(--line);
+  padding:11px 13px;background:#fff;color:var(--ink);font:inherit;font-size:.85rem;outline:none}
+.pick-search:focus{background:#f5f9ff}
+/* The option list. It paints its own white and the band around it is navy, so it
+   declares its own ink rather than trusting .find-box two levels up: that
+   inheritance is what would otherwise turn every row into white-on-white the day
+   the panel is moved out of the form card. */
+.pick-list{max-height:230px;overflow:auto;background:#fff;color:var(--ink)}
+/* Rows are a native option's height and padding, with a hairline between them and
+   the scheme count pushed right like a secondary label. A picked row is tinted the
+   way a selected option is, and carries the tick that says so. */
+.pick-row{display:flex;align-items:center;gap:9px;padding:9px 13px;cursor:pointer;line-height:1.35}
+.pick-row+.pick-row{border-top:1px solid #eef2f7}
 .pick-row:hover{background:#f2f7fd}
-.pick-row input{flex:none;width:15px;height:15px;margin:3px 0 0;accent-color:var(--navy2);cursor:pointer}
+.pick-row input{flex:none;width:15px;height:15px;margin:0;accent-color:var(--navy2);cursor:pointer}
 .pick-row .pick-name{flex:1;min-width:0;font-size:.85rem}
 .pick-count{color:var(--muted);font-weight:700;white-space:nowrap}
-.pick-row.on{background:#e8f2ff}
+.pick-row.on{background:#e8f2ff;color:var(--navy)}
+.pick-row.on .pick-count{color:var(--navy2)}
 .pick-row:focus-within{outline:2px solid #8ba8c5;outline-offset:-2px}
+/* The count line, pinned to the foot of the dropdown the way a select pins its
+   status text. It exists to disclose how much of the list is a one-off. */
+.pick-foot{margin:0;padding:8px 13px;border-top:1px solid var(--line);background:#f7f9fc;
+  font-size:.78rem;line-height:1.45;color:var(--muted)}
 /* The state of a multi-select is easy to lose once the list is a scroller, so
    the picks are spelled out underneath with a way to drop all of them. */
 .picked-note{margin:9px 0 0;font-size:.8rem;line-height:1.5;color:var(--muted)}
@@ -214,14 +240,39 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 .select-like{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;
   border:1px solid var(--line);padding:12px 13px;border-radius:11px;background:#fff;color:var(--ink)}
 .select-like:hover{border-color:#8ba8c5}
-.select-like.open{border-color:#8ba8c5;box-shadow:0 0 0 3px rgba(38,100,157,.10)}
+.select-like.open{border-color:#8ba8c5;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .select-like.has-value{font-weight:750}
 .select-caret{flex:none;color:var(--muted);font-size:.8rem;transition:transform .15s}
 .select-like.open .select-caret{transform:rotate(180deg)}
-/* Shared by the two "(select one or more)" fields, so they open and close the
-   same way. Renamed from .sector-panel when the beneficiary field joined it —
-   a class named for one field is a class waiting to be applied wrongly. */
-.picker-panel{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff;color:var(--ink)}
+/* ---------- the two "(select one or more)" fields ----------
+   The anchor is the closed control and the box it drops the dropdown onto. The
+   dropdown is absolutely positioned inside it, so opening a picker covers the
+   fields below instead of pushing them down the page: a dropdown that reflows
+   the form moves the very controls you are about to use, and the open panel
+   changes the layout under your own cursor. It is a wrapper rather than
+   position:relative on .field because the picked-picks note sits below the box
+   in the same field, and 100% of the field is under that note, not under the box. */
+
+/* z-index sits above the sticky header (50) so a dropdown scrolled up under the
+   bar still paints in front of it, and below the modal backdrop (100) so an open
+   modal is never covered by a picker left open behind it. */
+.picker-anchor{position:relative}
+.picker-panel{position:absolute;top:100%;left:0;right:0;z-index:60;
+  margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfdff;color:var(--ink);
+  box-shadow:0 18px 40px rgba(9,38,74,.18)}
+/* .rows is the variant for a dropdown built out of option rows, and it goes
+   further than the base: no gap above it, no padding, square top corners to meet
+   the box above, which drops its own bottom corners while open. Opening the field
+   then reads as the State / UT select expanding rather than a second widget
+   appearing underneath it.
+   The variant is named for how the dropdown's body is built — full-bleed rows —
+   not for the field it happens to be on, and the base class is untouched, so
+   either picker could take it. Scoping it by an id, or by a class carrying a
+   field's name, is the mistake the shared class was introduced to avoid. */
+.picker-panel.rows{margin-top:-1px;padding:0;border-radius:0 0 11px 11px;background:#fff}
+/* While the box above is open its border tints, so the dropdown's has to tint
+   with it or the two halves of one control would not share an outline. */
+.picker-panel.open{border-color:#8ba8c5}
 .picker-panel[hidden]{display:none}
 .full{grid-column:1/-1}.chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{border:1px solid var(--line);background:#f7f9fc;border-radius:999px;padding:8px 12px;font-size:.82rem;font-weight:750}

@@ -160,29 +160,69 @@ that bit are pinned down by contract tests:
     `textContent`, never `esc()`: `esc()` is for building HTML strings, and
     applying it to a text node displayed the entities themselves, so the stage
     option read `R&amp;D (3)` instead of `R&D (3)`.
-  - **Business / Beneficiary Type is a button and a checkbox panel**, the same
-    shape as the Industry / Sector field below it. It needs several answers, and a
-    `<select multiple>` cannot give them a real collapsed state, so it is the one
-    multi-pick field that is not a list box. The reasoning, because each part was a
-    separate failure:
+  - **Business / Beneficiary Type is that same dropdown with several picks
+    allowed.** The ask was "similar to State / UT, with multiple select", and
+    both halves of it are now true: the closed box is the State / UT box, it opens
+    and closes the way State / UT does, and any number of rows can be ticked. What
+    it is *not* is a `<select multiple>`, because that element cannot be drawn the
+    way the ask describes. Each part of that was a separate failure:
     - `<select multiple size="7">` **never collapsed**. Any `size` above 1 renders
       as a permanently open list box, so the control had no expanded state at all —
-      the original ask was "similar to State / UT, control and expand", and a native
-      multi-select cannot satisfy it.
+      a native multi-select cannot be "State / UT, control and expand".
     - On a desktop, **a plain click replaced the selection** instead of adding to
       it unless Ctrl/Cmd was held. The old note had to spell out "Ctrl / Cmd-click",
       which is not guessable and does not exist on a touch screen, so the same
       control silently behaved differently by device and the desktop path lost picks
-      without saying so. A checkbox per row is the same multi-select semantics with
+      without saying so. A tick per row is the same multi-select semantics with
       no modifier at all: a click always toggles.
-    - 76 values, **74% of which reach exactly one scheme**, in a 7-row window with
-      no filter, and the near-duplicates sit alphabetically adjacent
-      ("Biotech innovators" (2) next to "Biotech companies/startups" (1)). So the
-      panel filters, and its count line says how much of the list is a one-off.
-    - Two controls in one form both labelled "(select one or more)" have to behave
-      the same way, so the panel class is `.picker-panel`, shared with the sector
-      field. It was `.sector-panel`, and a class named for one field is a class
-      waiting to be applied wrongly.
+    - 76 values, **74% of which reach exactly one scheme**, and the near-duplicates
+      sit alphabetically adjacent ("Biotech innovators" (2) next to
+      "Biotech companies/startups" (1)). So the dropdown has a type-to-filter row
+      at its head, and a count line at its foot saying how much of the list is a
+      one-off.
+  - **The dropdown is drawn as one control with the box, not as a panel below
+    it.** The `.picker-panel.rows` variant has `margin-top:-1px`, no padding and
+    square-bottomed corners; the closed box drops its own bottom corners while
+    open, and both halves take the open tint together. Opening the field
+    therefore reads as the State / UT select expanding rather than a second
+    widget appearing underneath it. The filter row is flat — type-ahead on the
+    select above it, not a boxed input — and sits as a sibling *above* the
+    scroller, which is what keeps it in view; the count line is pinned to the
+    foot the way a select pins its status text. Each of those is pinned by a
+    test, because each can be undone one declaration at a time and the field
+    would still be a working multi-pick, it would just stop reading as the
+    select above it.
+  - **An open picker overlays the form instead of reflowing it.** The panel is
+    `position:absolute` inside a `.picker-anchor` wrapper, so it takes no space
+    in the form. In flow it opened a gap and pushed every field below it down the
+    page, which moves the very controls you are reaching for while the pointer is
+    on its way there and makes the field you are filling feel like it is
+    flinching. It is absolutely positioned against a wrapper rather than
+    `position:relative` on `.field` because the picked-picks note sits below the
+    box in that same field, so 100% of the field is under the note, not under the
+    box. It now carries a drop shadow — it floats over the form rather than
+    sitting in it — and drops the soft ring the open box used to carry, since the
+    panel would otherwise be covering that ring's lower half anyway. Keyboard
+    focus is unaffected: it is marked by the global `:focus-visible` outline, not
+    by that ring.
+  - **Its stacking sits between the sticky header and the modal backdrop**,
+    `z-index:60`. Above the header's 50, so a dropdown scrolled up under the bar
+    still paints in front of the bar instead of behind it; below the backdrop's
+    100, so a modal can never be covered by a picker left open behind it. A
+    pinned test reads those two numbers out of the file rather than restating
+    them, so moving the header or the modal cannot quietly leave the dropdown
+    behind or in front of the wrong one.
+  - `.rows` is named for **how the dropdown's body is built** — full-bleed option
+    rows — not for the field it happens to sit on, and the base `.picker-panel`
+    is untouched so either picker could take the variant. The sector field is a
+    chip cloud in a padded box, which is what it should stay. Scoping this by an
+    id, or by a class carrying a field's name, is the exact mistake the shared
+    class was introduced to avoid; `:has(>.pick-list)` would have worked but the
+    stylesheet is pinned to plain selectors by a test, so it is not available.
+  - Two controls in one form both labelled "(select one or more)" have to behave
+    the same way, so the panel class is `.picker-panel`, shared with the sector
+    field. It was `.sector-panel`, and a class named for one field is a class
+    waiting to be applied wrongly.
   - `eligBeneficiaries`, a `Set`, is the selection. The tick in the list is
     **derived** from it on every render, so the list and the profile are one fact
     read twice and cannot drift. The old `<select>` kept them as separate sources
@@ -193,12 +233,15 @@ that bit are pinned down by contract tests:
     untick it without clearing the filter and searching again. The count line says
     when it is holding a pick open, rather than quietly doing it.
   - The picks are echoed in words under the control, with a **Clear** button, and
-    the closed button names the **top ticked row of the list** rather than whichever
+    the closed box names the **top ticked row of the list** rather than whichever
     was clicked first — the list is alphabetical, so anything else would disagree
-    with what you just looked at.
+    with what you just looked at. It also **counts the picks**
+    (`3 selected · DPIIT-recognised startups +2 more`), which State / UT does not
+    need: this control can hold several answers, and a closed box naming one of
+    them would read as a single pick.
   - It opens and closes on the button, on **Escape**, and on a click anywhere
     outside it. The outside-click close is a document listener and it excludes both
-    the button and the panel, or the click that opened the picker would close it
+    the button and the dropdown, or the click that opened the picker would close it
     again on the way up. **The sector field never had this** and got it at the same
     time; both are driven through `document.dispatch` in the e2e suite.
   - Scoring mirrors the sector field: 20 points for a match, +3 for each further
@@ -207,8 +250,9 @@ that bit are pinned down by contract tests:
     adding a second selection could only push a real match down.
   - It stays a normal grid cell. The form is a 2-column grid with an even number
     of half-width fields; spanning this one `1/-1` would push it onto a new row
-    and leave an empty cell beside Business Stage. The panel is a half column
-    wide on desktop and the full width below the one-column breakpoint.
+    and leave an empty cell beside Business Stage. The dropdown is a half column
+    wide on desktop and the full width below the one-column breakpoint, and
+    because it overlays, nothing has to reserve space for it.
   - The white list sits inside the navy `find` band, so `.pick-list` and
     `.picker-panel` declare their own ink rather than trusting `.find-box` two
     levels up. `.pick-list` is in the contract suite's white-on-white band scan for
@@ -347,12 +391,12 @@ is verifiable against the source text rather than taken on trust.
 
 - Matching is guidance only — always verify eligibility on the official
   source linked on each scheme card.
-- Business Stage is a single-choice dropdown and Business / Beneficiary Type is a
-  multi-pick panel, both populated from the dataset, so neither can hold a value
-  that is not a real one. A trade-off: the dataset has no women-specific,
-  age-specific or turnover-specific beneficiary value at all, so a founder who is
-  one of those has no option to pick and no way to say so — the fields cannot
-  express what the data does not contain.
+- Business Stage is a single-choice dropdown and Business / Beneficiary Type is
+  that same dropdown allowing several picks, both populated from the dataset, so
+  neither can hold a value that is not a real one. A trade-off: the dataset has no
+  women-specific, age-specific or turnover-specific beneficiary value at all, so a
+  founder who is one of those has no option to pick and no way to say so — the
+  fields cannot express what the data does not contain.
 - Beneficiary Type is 76 near-duplicate labels for 59 schemes, **74% of them
   reaching a single scheme** ("Biotech startups", "Biotech startups indirectly",
   "Biotechnology startups", "Biotech companies/startups" are four rows). The

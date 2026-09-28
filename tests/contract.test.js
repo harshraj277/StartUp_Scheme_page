@@ -484,27 +484,32 @@ t.step("Business Stage and Beneficiary Type are pickers, like State / UT");
     /\.field input,\.field select\{/.test(css) && /\.field input:focus,\.field select:focus\{/.test(css));
   t.check("and the beneficiary field is styled by the same rules as the sector field, not its own",
     /<button type="button" class="select-like" id="businessPickerBtn"/.test(html) &&
-    /class="picker-panel" id="businessPanel"/.test(html) &&
+    /class="picker-panel rows" id="businessPanel"/.test(html) &&
     /class="picker-panel" id="sectorPanel"/.test(html));
   t.check("one panel class for both, not a class named for one of the two fields",
     /\.picker-panel\{/.test(css) && !/\.sector-panel\{/.test(css) && !/\.business-panel\{/.test(css));
 }
 
-t.step("Beneficiary Type expands, and several picks are kept and visible");
+t.step("Beneficiary Type is the State / UT dropdown, with several picks kept and visible");
 {
-  /* This was <select multiple size="7">. A list box has no expanded state at
-     all, which is why it never collapsed. Worse, on a desktop a plain click
-     REPLACED the selection instead of adding to it unless you held Ctrl — the
-     note had to spell out "Ctrl / Cmd-click", which is not guessable and does
-     not exist on a touch screen, so the same control silently behaved
-     differently by device and the desktop path lost picks. A checkbox per row
-     is the same multi-select semantics with a collapsed state and no modifier. */
+  /* The ask is "similar to State / UT, with multiple select". The closed control
+     and its open/close behaviour are State / UT's, and several rows can be ticked
+     at once — but the rows are checkboxes, not <option>s inside a <select
+     multiple>. That element is a list box with no expanded state at all, so it
+     never collapsed, and on a desktop a plain click REPLACED the selection
+     instead of adding to it unless you held Ctrl: the note had to spell out
+     "Ctrl / Cmd-click", which is not guessable and does not exist on a touch
+     screen, so the same control silently behaved differently by device and the
+     desktop path lost picks. A tick per row is the same multi-select semantics
+     with a collapsed state and no modifier. */
   t.check("no <select multiple> is left on either page, so the trap cannot come back",
     !/<select[^>]*\smultiple/.test(html) && !/<select[^>]*\smultiple/.test(fs.readFileSync("compare.html", "utf8")));
-  t.check("the control is a button that owns a panel, so it has a collapsed state",
-    /<button[^>]*id="businessPickerBtn"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(html));
-  t.check("and the panel ships closed, with a rule that makes hidden work on a div",
-    /class="picker-panel" id="businessPanel" hidden/.test(html) &&
+  t.check("the control is a button that owns a dropdown, so it has a collapsed state",
+    /<button[^>]*id="businessPickerBtn"[^>]*aria-haspopup="listbox"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(html));
+  t.check("and it tells a screen reader it opens a list of options, which a bare aria-expanded does not say",
+    /aria-haspopup="listbox"/.test(html) && /aria-controls="businessPicks"/.test(html));
+  t.check("the panel ships closed, with a rule that makes hidden work on a div",
+    /class="picker-panel rows" id="businessPanel" hidden/.test(html) &&
     /\.picker-panel\[hidden\]\{display:none\}/.test(css));
   t.check("aria-expanded is kept in step with the panel, for a screen reader",
     /function syncBusinessPanel\(\)\{[\s\S]*?btn\.setAttribute\("aria-expanded", String\(businessPanelOpen\)\)/.test(code(js)));
@@ -516,6 +521,66 @@ t.step("Beneficiary Type expands, and several picks are kept and visible");
   t.check("the box is styled as one, and the list as a scroller rather than a list box",
     /\.pick-row input\{[^}]*accent-color/.test(css) && /\.pick-list\{[^}]*overflow:auto/.test(css) &&
     !/\.field select\[multiple\]/.test(css));
+  /* "It is the State / UT dropdown again" is a claim about how three boxes relate
+     in space, and prose claiming it is not a check: each of these can be undone
+     one declaration at a time and the field would still be a working multi-pick,
+     it would just stop reading as the select above it. */
+  t.check("the dropdown hangs off the closed box with no gap, and squares the box's bottom corners",
+    /\.picker-panel\.rows\{margin-top:-1px;padding:0/.test(css) &&
+    /\.select-like\.open\{[^}]*border-bottom-left-radius:0;border-bottom-right-radius:0/.test(css),
+    (/\.picker-panel\.rows\{[^}]*\}/.exec(css) || [])[0]);
+  t.check("so the top of the dropdown is a continuation of the box, not a second bordered panel",
+    /\.picker-panel\.rows\{[^}]*border-radius:0 0 11px 11px/.test(css));
+  /* Opening a picker must cover the fields below, not push them down. In flow it
+     reflowed the grid: the controls you were about to use moved while you reached
+     for them, and the panel changed the layout under your own cursor. */
+  t.check("the dropdown is taken out of flow, so opening it overlays instead of reflowing the form",
+    /\.picker-panel\{position:absolute;top:100%;left:0;right:0;/.test(css),
+    (/\.picker-panel\{[^}]*\}/.exec(css) || [])[0]);
+  t.check("it is positioned against a wrapper holding just the box, not against the whole field",
+    /\.picker-anchor\{position:relative\}/.test(css) &&
+    /<label id="businessPicksLabel">[\s\S]*?<div class="picker-anchor"><button[^>]*id="businessPickerBtn"[\s\S]*?<div class="picker-panel rows" id="businessPanel"[\s\S]*?<\/div><p class="picked-note"/.test(html) &&
+    /<div class="picker-anchor"><button[^>]*id="sectorPickerBtn"[\s\S]*?<div class="picker-panel" id="sectorPanel"[\s\S]*?<\/div><\/div><\/div>/.test(html),
+    "the note sits after the anchor, so 100% of .field would be under the note, not under the box");
+  t.check("it carries a drop shadow, because it now floats over the form",
+    /\.picker-panel\{[^}]*box-shadow:/.test(css));
+  /* Above the sticky header (50) so a dropdown scrolled up under the bar still
+     paints in front of it; below the modal backdrop (100) so an open modal is
+     never covered by a picker left open behind it. */
+  t.check("and its stacking sits between the sticky header and the modal backdrop",
+    (() => {
+      const z = Number((/\.picker-panel\{[^}]*z-index:(\d+)/.exec(css) || [])[1]);
+      return z > 50 && z < 100;
+    })(),
+    "z-index " + (/\.picker-panel\{[^}]*z-index:(\d+)/.exec(css) || [])[1] + " vs header 50 / modal 100");
+  /* :has() rather than an id or a class named for the field: the sector panel
+     shares .picker-panel and is a chip cloud in a padded box, which is what it
+     should stay. If the attached treatment were unscoped it would push the chip
+     cloud flush against the border, and if it were id-scoped the shared class
+     would have gone back to being two controls' styles. */
+  t.check("and it is a layout variant on the shared class, not a second control's private class",
+    /class="picker-panel rows" id="businessPanel"/.test(html) &&
+    /class="picker-panel" id="sectorPanel"/.test(html) &&
+    /\.picker-panel\{position:absolute/.test(css) &&
+    !/\.business-panel|\.sector-panel|\.business-rows|\.sector-rows|\.beneficiary-rows/.test(code(css)),
+    "one base class for both fields, one .rows variant keyed to the body's shape");
+  /* The box tints its border while open, so the dropdown has to tint with it or
+     the two halves of one control do not share an outline. That needs the class
+     on both elements, not just the box — the CSS has no parent state to read. */
+  t.check("and the two halves share one border colour while open",
+    /\.picker-panel\.open\{border-color:#8ba8c5\}/.test(css) &&
+    /function syncBusinessPanel\(\)\{[\s\S]*?panel\.classList\.toggle\("open", businessPanelOpen\)/.test(code(js)) &&
+    /function syncSectorPanel\(\)\{[\s\S]*?panel\.classList\.toggle\("open", sectorPanelOpen\)/.test(code(js)),
+    "the sector picker shares the panel class, so it needs the class too");
+  t.check("the filter row is type-ahead inside the dropdown: flat, and a sibling of the scroller so it cannot scroll away",
+    /\.pick-search\{[^}]*border-bottom:1px solid var\(--line\)/.test(css) && !/\.pick-search\{[^}]*border-radius/.test(css) &&
+    /<input id="businessFilter" class="pick-search"[\s\S]*?<div class="pick-list" id="businessPicks"/.test(html) &&
+    /<\/div><p class="pick-foot" id="businessPicksCount"/.test(html),
+    "the row must come before the scroller and the foot line after it, or the dropdown scrolls its own chrome away");
+  t.check("the count line is pinned to the foot of the dropdown, the way a select pins its status text",
+    /<p class="pick-foot" id="businessPicksCount"/.test(html) && /\.pick-foot\{[^}]*border-top:1px solid var\(--line\)/.test(css));
+  t.check("it is no longer a chip-bar row floating above the list, which is the sector field's layout",
+    !/class="chip-bar"><span class="dash-mini" id="businessPicksCount"/.test(html));
   /* "The two fields should look alike" is a claim about six declarations in two
      different rules, and prose claiming it is not a check. Compared value by
      value, so a one-sided tweak (a rounder border on the button, say) fails
@@ -542,11 +607,18 @@ t.step("Beneficiary Type expands, and several picks are kept and visible");
     /* The group rule alone is not enough: a later bare `select{}` or
        `.select-like{}` setting font-family would win the cascade and put a
        serif letterform in one field and a sans one in its neighbour, while the
-       rule above still read as present. */
+       rule above still read as present.
+       Comments are stripped off each selector first, the same way decls() above
+       does. Without that, prose in the stylesheet is read as a selector: a
+       comment explaining why there is no <select multiple> contains the word
+       "select", and the very next rule that sets a font — the dropdown's own
+       type-to-filter row — was reported here as a rule styling the select. The
+       check is about the closed control's font, so only real selectors count. */
     const GROUP = "button,input,select";
+    const selectorOf = (s) => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\s+/g, " ").trim();
     const loneFont = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
-      .map(m => [m[1].trim(), m[2]])
-      .filter(([sel]) => sel !== GROUP && /(^|[\s,>])(select|button)\b|\.select-like/.test(sel))
+      .map(m => [selectorOf(m[1]), m[2]])
+      .filter(([sel]) => sel && sel !== GROUP && /(^|[\s,>])(select|button)\b|\.select-like/.test(sel))
       .filter(([, body]) => /(^|;)\s*font(-family)?\s*:/.test(body))
       .map(([sel]) => sel);
     t.check("and it inherits the same font, so it cannot read as a button next to a select",
@@ -651,8 +723,14 @@ t.step("Beneficiary Type expands, and several picks are kept and visible");
     /function clearBusinessPicks\(\)\{[\s\S]*?syncBusinessPicks\(\);/.test(code(js)));
   t.check("and so does the reset",
     /function resetForm\(\)\{[\s\S]*?syncBusinessPicks\(\)/.test(code(js)));
-  t.check("the closed button names the top ticked row, so it agrees with the list order",
+  t.check("the closed box names the top ticked row, so it agrees with the list order",
     /\[...eligBeneficiaries\]\.sort\(\(a,b\)=>a\.localeCompare\(b\)\)/.test(code(js)));
+  /* Unlike State / UT, this control can hold several answers, so the closed box
+     cannot name them all and has to say how many there are instead. Without the
+     count it would read as one pick and you would have to open the dropdown to
+     find out that four more were already ticked. */
+  t.check("and it counts the picks on the closed box, because it can hold more than one",
+    /\$\{names\.length\} selected · \$\{truncate\(names\[0\],26\)\} \+\$\{names\.length-1\} more/.test(code(js)));
   t.check("the label says several may be chosen",
     /Business \/ Beneficiary Type <span class="ref-tag">\(select one or more\)<\/span>/.test(html));
   /* Removed with the list box, and pinned so none of it creeps back. */
@@ -1051,7 +1129,13 @@ t.step("every text/background pair on the new surfaces clears WCAG AA");
     ["picker panel copy", "#10243d", "#fbfdff", 4.5, /\.picker-panel\{[^}]*color:var\(--ink\)/],
     ["picker row name", "#10243d", "#ffffff", 4.5, /\.pick-list\{[^}]*color:var\(--ink\)/],
     ["picker row scheme count", "#607089", "#ffffff", 4.5, /\.pick-count\{[^}]*color:var\(--muted\)/],
-    ["a ticked picker row", "#10243d", "#e8f2ff", 4.5, /\.pick-row\.on\{background:#e8f2ff\}/],
+    ["a ticked picker row", "#10243d", "#e8f2ff", 4.5, /\.pick-row\.on\{[^}]*background:#e8f2ff/],
+    /* A ticked row tints the count with it, so the pair it creates is its own
+       check rather than a reuse of the unticked one above. */
+    ["the count on a ticked row", "#123a68", "#e8f2ff", 4.5, /\.pick-row\.on \.pick-count\{[^}]*color:var\(--navy2\)/],
+    /* The count line moved from a boxed panel to the foot of the dropdown, so it
+       is now grey on the foot's own tint rather than grey on the panel's. */
+    ["the dropdown count line", "#607089", "#f7f9fc", 4.5, /\.pick-foot\{[^}]*color:var\(--muted\)/],
   ];
   pairs.forEach(([label, fg, bg, need, inCss]) => {
     const r = ratio(fg, bg);

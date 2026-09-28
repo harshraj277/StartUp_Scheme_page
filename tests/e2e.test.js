@@ -543,18 +543,50 @@ try {
   t.check("the empty option is the one selected on load, so nothing is pre-filled",
     $("stage").children[0].selected === true);
 
-  t.step("Beneficiary Type is a picker that expands, like the sector field");
-  /* This control used to be <select multiple size="7">. A list box has no
-     expanded state, so it never collapsed, and on a desktop a plain click
-     REPLACED the selection instead of adding to it unless you held Ctrl — which
-     is why the old note had to explain Ctrl / Cmd-click, and why a phone and a
-     laptop behaved differently. Checkboxes remove the modifier entirely. */
+  t.step("Beneficiary Type is the State / UT dropdown, with several picks allowed");
+  /* The ask is "similar to State / UT, with multiple select". The closed control
+     and its open/close are State / UT's; several rows can be ticked at once. The
+     rows are checkboxes rather than <option>s in a <select multiple>, because
+     that element is a list box with no expanded state — it never collapsed — and
+     on a desktop a plain click REPLACED the selection instead of adding to it
+     unless you held Ctrl, which is why the old note had to explain Ctrl /
+     Cmd-click and why a phone and a laptop behaved differently. Checkboxes remove
+     the modifier entirely. */
   t.check("no <select multiple> is left anywhere on the page",
     !/<select[^>]*\smultiple/.test(HTML), (/<select[^>]*multiple[^>]*>/.exec(HTML) || [])[0]);
-  t.check("the control is a button that owns a panel, so it has a collapsed state",
-    /<button[^>]*id="businessPickerBtn"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(HTML));
+  t.check("the control is a button that owns a dropdown, so it has a collapsed state",
+    /<button[^>]*id="businessPickerBtn"[^>]*aria-haspopup="listbox"[^>]*aria-expanded="false"[^>]*aria-controls="businessPanel"/.test(HTML));
   t.check("and the panel is inside the button's field, hidden until it is opened",
     /id="businessPanel"[^>]*\shidden/.test(HTML));
+  t.check("the dropdown hangs off the closed box, so the two read as one control expanding",
+    /<div class="picker-panel rows" id="businessPanel"/.test(HTML) &&
+    /\.picker-panel\.rows\{margin-top:-1px;padding:0/.test(CSS) &&
+    /\.select-like\.open\{[^}]*border-bottom-left-radius:0/.test(CSS) &&
+    /\.picker-panel\.rows\{[^}]*border-radius:0 0 11px 11px/.test(CSS),
+    (/\.picker-panel\.rows\{[^}]*\}/.exec(CSS) || [])[0]);
+  t.check("and it is a variant on the shared panel class, so the sector field keeps its padded box",
+    /<div class="picker-panel" id="sectorPanel"/.test(HTML) &&
+    /\.picker-panel\{[^}]*padding:12px/.test(CSS));
+  /* Opening a picker must cover the fields below, not push them down. In flow it
+     reflowed the grid, moving the controls you were about to use. */
+  t.check("it is absolutely positioned, so opening it overlays the form instead of reflowing it",
+    /\.picker-panel\{position:absolute;top:100%;left:0;right:0/.test(CSS) &&
+    /<div class="picker-anchor"><button[^>]*id="businessPickerBtn"[\s\S]*?<\/div><p class="picked-note"/.test(HTML),
+    (/\.picker-panel\{[^}]*\}/.exec(CSS) || [])[0]);
+  t.check("it is anchored to a wrapper round the box, and shadowed now that it floats",
+    /\.picker-anchor\{position:relative\}/.test(CSS) &&
+    /\.picker-panel\{[^}]*box-shadow:/.test(CSS));
+  t.check("the sector picker overlays the same way — the two fields must not differ here",
+    /<div class="picker-anchor"><button[^>]*id="sectorPickerBtn"[\s\S]*?<div class="picker-panel" id="sectorPanel"/.test(HTML));
+  t.check("and both halves take the open tint together, so they share one outline",
+    /\.picker-panel\.open\{border-color:#8ba8c5\}/.test(CSS));
+  t.check("its type-to-filter row is a flat row above the list, not a boxed input floating in a panel",
+    /<input id="businessFilter" class="pick-search"[^>]*aria-controls="businessPicks"[\s\S]*?<div class="pick-list" id="businessPicks"/.test(HTML) &&
+    /\.pick-search\{[^}]*border-bottom:1px solid var\(--line\)/.test(CSS),
+    (/\.pick-search\{[^}]*\}/.exec(CSS) || [])[0]);
+  t.check("and the count line is pinned to the foot of the dropdown, below the list",
+    /<p class="pick-foot" id="businessPicksCount" role="status"/.test(HTML) &&
+    /\.pick-foot\{[^}]*border-top:1px solid var\(--line\)/.test(CSS));
   t.check("the panel is a scrollable checkbox list, not a permanent list box",
     /<div class="pick-list" id="businessPicks"/.test(HTML) &&
     /\.pick-list\{[^}]*max-height:\d+px[^}]*overflow:auto/.test(CSS) &&
@@ -580,16 +612,24 @@ try {
   t.check("nothing is selected on load", businessPicks().length === 0, businessPicks().join(" | "));
 
   t.step("it opens, closes, and closes again when you click away");
-  t.check("closed on load", $("businessPanel").hidden === true);
+  t.check("closed on load", $("businessPanel").hidden === true &&
+    !$("businessPanel").classList.contains("open"));
   api.toggleBusinessPanel();
   t.check("clicking the button opens it and says so to a screen reader",
     $("businessPanel").hidden === false &&
     $("businessPickerBtn").getAttribute("aria-expanded") === "true" &&
     $("businessPickerBtn").classList.contains("open"));
+  /* The box and the dropdown are drawn as one control, so the open tint has to
+     reach both. Reading the panel's class here rather than trusting the CSS is
+     the point: a rule for .picker-panel.open with nothing ever adding that class
+     is an outline that never tints. */
+  t.check("and the dropdown takes the open tint with the box, so the outline is continuous",
+    $("businessPanel").classList.contains("open"));
   api.closeBusinessPanel();
   t.check("clicking it again closes it",
     $("businessPanel").hidden === true &&
-    $("businessPickerBtn").getAttribute("aria-expanded") === "false");
+    $("businessPickerBtn").getAttribute("aria-expanded") === "false" &&
+    !$("businessPanel").classList.contains("open"));
   api.toggleBusinessPanel();
   /* The outside-click close is a document listener, so it has to be driven the
      way the browser drives it. Before this existed the only ways out of either
@@ -647,8 +687,14 @@ try {
   t.check("each row's box is wired to the toggle for that row, with the value escaped",
     pickRows().filter(r => r._input.onchange === "toggleBeneficiary('" + r.dataset.beneficiary.replace(/'/g, "\\'") + "')").length === pickRows().length,
     pickRows()[0]._input.onchange);
-  t.check("the closed button names the top ticked row of the list, not whichever was clicked first",
+  t.check("the closed box names the top ticked row of the list, not whichever was clicked first",
     /DPIIT-recognised startups \+2 more/.test($("businessPickerLabel").textContent),
+    $("businessPickerLabel").textContent);
+  /* Unlike State / UT this control can hold several answers, and the closed box
+     can only name one of them, so it has to say how many there are or it reads
+     as a single pick. */
+  t.check("and it says how many are picked, so the count is visible without opening it",
+    /^3 selected · DPIIT-recognised startups \+2 more$/.test($("businessPickerLabel").textContent),
     $("businessPickerLabel").textContent);
   t.check("and the note lists the picks in that same order, so both read like the list",
     $("businessPicked").innerHTML.indexOf("DPIIT-recognised startups") <
@@ -664,6 +710,10 @@ try {
   pickBusiness([]);
   t.check("with nothing picked the note says so",
     /Nothing selected/.test($("businessPicked").innerHTML), $("businessPicked").innerHTML);
+  t.check("and the closed box goes back to its empty-state wording, not a stale count",
+    $("businessPickerLabel").textContent === "Select beneficiary types…" &&
+    !$("businessPickerBtn").classList.contains("has-value"),
+    $("businessPickerLabel").textContent);
   t.check("and the Clear button is gone when there is nothing to clear",
     !/Clear/.test($("businessPicked").innerHTML));
   t.check("and no row is left ticked in the list",
