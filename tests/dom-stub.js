@@ -15,9 +15,16 @@ const ROOT = path.resolve(__dirname, "..");
    the test can see it — the same way a browser would. */
 function makeEl(tag, chipCache, store, rowCache) {
   let _html = "";
-  const parseChips = () => {
-    chipCache.set(el._id, [..._html.matchAll(/<button class="chip[^"]*" type="button" data-sector="([^"]*)"(?: data-count="(\d+)")?/g)].map(m => ({
-      dataset: { sector: m[1].replace(/&amp;/g, "&"), count: m[2] === undefined ? undefined : m[2] },
+  /* One parse per field, keyed on the data attribute the field actually uses
+     (data-sector / data-beneficiary). A single regex would have matched the
+     sector list and silently returned nothing for the beneficiary list, so a
+     test counting its chips would have passed over an empty wall. */
+  const parseChips = (field) => {
+    const key = field || (el._id === "beneficiaryChips" ? "beneficiary" : "sector");
+    chipCache.set(el._id, [..._html.matchAll(new RegExp(
+      '<button class="chip[^"]*" type="button" data-' + key + '="([^"]*)"(?: data-count="(\\d+)")?', "g")
+    )].map(m => ({
+      dataset: { [key]: m[1].replace(/&amp;/g, "&"), count: m[2] === undefined ? undefined : m[2] },
       classList: makeEl("div", chipCache, store, rowCache).classList,
       hidden: false,
     })));
@@ -119,8 +126,11 @@ function runQuery(sel, chipCache, rowCache, hostId, store) {
 
 /* The controls inside <section class="find">, by tag. resetForm() clears them by
    selector, so the stub has to know which is which. */
-const FORM_INPUTS = ["startupName", "sectorFilter"];
-const FORM_SELECTS = ["state", "stage", "business", "recognition", "access", "support", "funding"];
+/* The two chip fields' filter boxes are inputs inside #find, so resetForm()
+   clears them with the rest of the form by selector. */
+const CHIP_FILTERS = ["sectorFilter", "beneficiaryFilter"];
+const FORM_INPUTS = ["startupName", ...CHIP_FILTERS];
+const FORM_SELECTS = ["state", "stage", "recognition", "access", "support", "funding"];
 
 /* The same controls, for tag: a test asserting a field is a <select> needs the
    stub to agree with the markup. sort/fMinistry and friends are selects too. */
@@ -130,7 +140,9 @@ const INPUT_IDS = ["searchInput", ...FORM_INPUTS];
 /* Every id index.html provides. Pre-creating them keeps the stub honest. */
 const PAGE_IDS = ["trustCount","trustMinistries","dashVerified","heroBadge","sectorChips","sectorChipsCount","sectorFilter",
  "fMinistry","fType","fStatus","fFinance","fRepay","govLevelNote",
- "fundCoverage","accessCoverage","accessTag","stage","business","recognition","state","access","support","funding",
+ "beneficiaryChips","beneficiaryFilter","beneficiaryChipsCount","beneficiaryToggleBtn",
+ "beneficiaryPanel","beneficiaryPickerBtn","beneficiaryPickerLabel",
+ "fundCoverage","accessCoverage","accessTag","stage","recognition","state","access","support","funding",
  "startupName","results","resultCount","paginationWrap","prevPageBtn","nextPageBtn","pagingInfo","browseToolbar","filtersPanel","modeBanner","sectorToggleBtn",
  "sectorPanel","sectorPickerBtn","sectorPickerLabel",
  "quickFilterBanner","resultsHeading","searchInput","sort","toast","modalBackdrop","modalContent",

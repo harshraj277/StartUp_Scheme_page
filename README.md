@@ -42,14 +42,22 @@ then open <http://localhost:8080>.
 npm test
 ```
 
-or `node tests/run-tests.js`. Four suites, no dependencies:
+or `node tests/run-tests.js`. Four suites, 566 checks, no dependencies:
 
-| Suite | What it guards |
-| --- | --- |
-| `tests/engine.test.js` | Scoring order, fuzzy free-text matching, token-AND search, ₹-amount parsing, access-route classification and blocker ranking, that every form input actually scores |
-| `tests/contract.test.js` | Every `getElementById` and inline handler resolves, no dead markup or dead CSS, no facet asked in two places, label/alt wiring, dataset field shape, and that no rule is implemented twice across the two pages |
-| `tests/e2e.test.js` | Boots the real `app.js` in a stub DOM and drives it as a user would — including paging forward and back through the whole result set, and ticking saved schemes to compare |
-| `tests/compare.test.js` | Boots the real `js/compare.js` the way the main page boots: ids from the query string, the localStorage fallback, orphan disclosure, escaping, and the differences toggle |
+| Suite | Checks | What it guards |
+| --- | --- | --- |
+| `tests/engine.test.js` | 79 | Scoring order, fuzzy free-text matching, token-AND search, ₹-amount parsing, access-route classification and blocker ranking, that every form input actually scores |
+| `tests/contract.test.js` | 237 | Every `getElementById` and inline handler resolves, no dead markup or dead CSS, no facet asked in two places, label/alt wiring, dataset field shape, and that no rule is implemented twice across the two pages |
+| `tests/e2e.test.js` | 224 | Boots the real `app.js` in a stub DOM and drives it as a user would — including paging forward and back through the whole result set, ticking saved schemes to compare, and both multi-select chip fields |
+| `tests/compare.test.js` | 26 | Boots the real `js/compare.js` the way the main page boots: ids from the query string, the localStorage fallback, orphan disclosure, escaping, and the differences toggle |
+
+A note on writing them: a check that compares a value with itself, or that reads
+a value the code never wrote, passes forever and guards nothing. Several checks
+here were rewritten after doing exactly that — an "independence" check between
+the two chip fields compared a chip count against itself, a "full profile" test
+set a form control's `.value` and then never asserted on it, and two checks
+regexed `index.html` for attributes that `initControls()` writes at runtime. Each
+now takes a snapshot before the action and compares against that.
 
 ## Desktop layout
 
@@ -74,23 +82,41 @@ that bit are pinned down by contract tests:
 - The results grid is 5-up at ≥1800px, 4-up at 1440–1799px, 3-up at
   1081–1439px, 2-up at 761–1080px, 1-up below. Four columns across a 27" screen
   left ~600px cards, so the extra width buys a fifth column instead.
-- Business Stage and Business / Beneficiary Type are plain `<select>` elements,
-  like State / UT and the advanced filters. They were `<input list>` + `<datalist>`,
-  which is why they looked like text boxes: a browser only opens a datalist popup
-  once you have typed a character and draws no arrow to invite you. All of it is
-  in the control, so there is nothing to expand first.
-  - Each option carries its scheme count — `Early Stage (45)`, `Pilot (1)`. There
-    are 76 beneficiary values across 59 schemes and many are near-duplicates, so
-    without a count a label reaching one scheme looks identical to "Startups (16)".
-  - The option `.value` is the bare dataset string; the count is only in the
-    label. The matcher compares `.value`, so escaping it into the label while
-    keeping the value raw is deliberate.
-  - Each starts on a labelled empty option, so the form cannot submit an answer
-    the user never gave.
-  - A `<select>` cannot hold a value outside the dataset, so the "not a dataset
-    value" hint under each field went with the free-text inputs, as did the two
-    empty-result tips about it. `resolveAgainst()` stays wired in underneath and
-    still does fuzzy resolution — that is the path a restored value takes.
+- **Business / Beneficiary Type is a multi-select chip field, the same control as
+  Industry / Sector** — a collapsed button that opens a panel of toggleable
+  chips, with a type-to-filter box and a "Show all" toggle. It was a single-value
+  `<select>`, which was wrong on the data's own terms: a record lists a mean of
+  2.54 beneficiary types (max 4), so a scheme is routinely open to a *pair* of
+  what a founder considers one identity — "Startups" and "MSMEs", "Startups" and
+  "DPIIT-recognised startups". Single-select forced a real applicant to pick
+  whichever label happened to reach the most schemes and drop the other.
+  - Both chip fields run off **one implementation** (`CHIP_FIELDS` +
+    `applyChips(field)` + `chipState[field]`), not two hand-written copies. Two
+    copies of the same widget is how they drift; this file has already been
+    bitten by that once, when the hand-drawn `.combo` dropdown and the native
+    `<select>` version of this same field went out of step.
+  - Each chip carries its scheme count — `Startups (16)`, `Artisans (1)`. 56 of
+    the 76 beneficiary values reach exactly one scheme, so without a count a
+    one-off label looks identical to a widely-reached one.
+  - The list collapses to the values reaching 2+ schemes (20 of 76) and keeps the
+    tail behind `Show all 76 ▾`. Nothing is unreachable: typing shows every
+    match regardless of the collapse, and a **selected value is never hidden**,
+    because you cannot deselect what you cannot see.
+  - Clicking anywhere outside an open panel closes it, as does <kbd>Esc</kbd>.
+    An overlay the user has to guess how to dismiss is a dead control.
+  - Scoring mirrors the sector axis: 20 for a match, +3 per additional matching
+    type, capped at +6. The cap stops one axis from dominating a 98-point scale.
+  - `resolveAgainst()` is no longer called for this field. A chip can only ever
+    hold a dataset string, so the fuzzy path had nothing to resolve. It is still
+    wired in for **Business Stage**, which is still a single-value `<select>` —
+    a startup is at one stage, so a second option would be a contradiction
+    rather than a wider match. `resolveAgainst()` is also the path a restored
+    value takes.
+- The form is a 2-column grid. Seven half-width fields and two full-width
+  pickers do not divide by two, so one cell is always empty. The pickers sit
+  last, which puts that empty cell at the end of the run instead of mid-form
+  beside Business Stage, where it read as a broken row.
+
 - The compare table caps columns at `max-width:360px` with `overflow-wrap`. The
   cell text is deliberately untruncated, so without a cap one long eligibility
   paragraph stretches its column to several thousand pixels and pushes the other
@@ -156,7 +182,7 @@ comes from a real dataset field, and the reason is printed on the card.
 | Business stage | 30 | Fuzzy: `"early strt"` resolves to *Early Stage* |
 | Sector — specific match | 30–36 | **Outranks a sector-agnostic scheme** |
 | Sector — `Sector-agnostic` | 16 | Still relevant, just less specific |
-| Beneficiary type | 20 | Fuzzy |
+| Beneficiary type | 20–26 | Multi-select: 20, +3 per extra matching type, capped at +6 |
 | Support type | 16 | The only support-type control — see "Two ways to find schemes" |
 | DPIIT / Udyam recognition | 10 each | Text match on the record |
 | Incubation / access route | 8–14 | A real gate — see below |
@@ -211,15 +237,27 @@ is verifiable against the source text rather than taken on trust.
   and keeps the other 61 behind a **Show all** toggle. Nothing is removed: a
   selected sector is never collapsed out of reach, typing in the filter shows
   matches regardless of the collapse, and all 83 remain selectable.
+- **Beneficiary Type has the same shape of problem, and it is a data defect as
+  much as a UI one**: 76 distinct labels across 59 schemes, 56 of which reach
+  exactly one scheme, and over 20% are near-duplicates of each other
+  (`Biotech startups` / `Biotech startups indirectly` / `Biotechnology startups`
+  / `Biotech companies/startups`). The picker behaves identically to the sector
+  one — 20 shown by default, all 76 behind a toggle, none unreachable — but no
+  amount of UI work fixes 76 names for 59 schemes. **Normalising those labels is
+  a data-cleaning task, not a UI one**, and it is the single highest-value change
+  available to this dataset.
 
 ## Notes
 
 - Matching is guidance only — always verify eligibility on the official
   source linked on each scheme card.
-- Business Stage and Business / Beneficiary Type are free-text fields with
-  auto-suggestions and live validation: a value that is not in the dataset
-  shows the closest real values, and a zero-result search explains which input
-  was unrecognised.
+- Business Stage is a single-value `<select>` and Business / Beneficiary Type is
+  a multi-select chip field, both drawn from the dataset rather than typed. That
+  is deliberate: a free-text field cannot be scored reliably, because a value
+  that is not in the dataset matches nothing and the user is told so only after
+  the fact. `resolveAgainst()` still does fuzzy resolution underneath, which is
+  the path a restored value takes — `"early strt"` still resolves to
+  *Early Stage*.
 - Search is token-AND across name, ministry, scheme type, objective, sectors,
   tags, benefit types, beneficiaries and body text, so `loan for startup` and
   `msme loan` both work.

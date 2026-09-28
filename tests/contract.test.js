@@ -155,9 +155,17 @@ t.check("a toggle control exists and is wired to the list it controls",
 t.check("collapse state is exposed to assistive tech, not just visual",
   /btn\.setAttribute\("aria-expanded"/.test(js) && /id="sectorToggleBtn"[^\n]*aria-expanded="false"/.test(html));
 t.check("every chip still carries its scheme count for the collapse rule", /data-count="\$\{c\}"/.test(js));
-t.check("a selected sector is never collapsed out of reach", /const keep = eligSectors\.has/.test(js));
+  /* Reads through the field spec rather than a literal, so the rule is checked
+     once for both fields instead of being duplicated per field. */
+  t.check("a selected value is never collapsed out of reach, for either field",
+    /const keep = f\.set\.has\(name\)/.test(js));
+  t.check("and each field has its own set, so neither can read the other's",
+    /sector:\s*\{ set: eligSectors/.test(js) &&
+    /beneficiary:\s*\{ set: eligBeneficiaries/.test(js));
 t.check("the collapsed list is described honestly to the user", /each reach just one scheme/.test(js));
-t.check("reset restores the collapsed default", /sectorListExpanded=false;/.test(js));
+  t.check("reset restores the collapsed default for both fields",
+    /chipState\.sector\.expanded=false;/.test(js) &&
+    /chipState\.beneficiary\.expanded=false;/.test(js));
 t.check("the toggle has its own styles", /\.chip-more\{/.test(css) && /\.chip-bar\{/.test(css));
 t.check("the toggle is visible only when it has something to do", /btn\.hidden = !!q/.test(js));
 
@@ -165,15 +173,20 @@ t.step("sector field behaves like a dropdown, like State / UT");
 t.check("the closed control is a button, not a wall of chips",
   /<button[^>]*id="sectorPickerBtn"/.test(html) && /id="sectorPanel" hidden/.test(html));
 t.check("it points at the panel it opens", /id="sectorPickerBtn"[^>]*aria-controls="sectorPanel"/.test(html));
-t.check("expanded state is mirrored for assistive tech",
-  /setAttribute\("aria-expanded", String\(sectorPanelOpen\)\)/.test(js) && /aria-expanded="false"/.test(html));
+t.check("expanded state is mirrored for assistive tech, for either field",
+  /btn\.setAttribute\("aria-expanded", String\(st\.expanded\)\)/.test(js) &&
+  /btn\.setAttribute\("aria-expanded", String\(st\.open\)\)/.test(js));
 t.check("the closed control reports the current selection instead of hiding it",
   /syncSectorPickerLabel/.test(js) && /sectorPickerLabel/.test(html));
-t.check("Escape closes the panel", /else if\(sectorPanelOpen\) closeSectorPanel\(\)/.test(js));
+  t.check("Escape closes whichever panel is open, sector first",
+    /else if\(chipState\.sector\.open\) closeSectorPanel\(\)/.test(js) &&
+    /else if\(chipState\.beneficiary\.open\) closeBeneficiaryPanel\(\)/.test(js));
 t.check("the panel has a closed rule, so hidden actually works on a div",
-  /\.sector-panel\[hidden\]\{display:none\}/.test(css));
+  /\.chip-panel\[hidden\]\{display:none\}/.test(css));
 t.check("the control is styled to match the select it imitates", /\.select-like\{/.test(css));
-t.check("reset closes the panel and clears the label", /sectorPanelOpen=false;/.test(js));
+  t.check("reset closes the panel and clears the label, for both fields",
+    /chipState\.sector\.open=false;/.test(js) &&
+    /chipState\.beneficiary\.open=false;/.test(js));
 /* compareBar / compareBarText / compareBarLink are created at runtime by renderCompareBar(). */
 const markupIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]));
 [...js.matchAll(/id="([^"]+)"/g)].forEach(m => markupIds.add(m[1]));
@@ -381,17 +394,31 @@ t.check("the css braces still balance",
    the whole list is one click away with nothing to expand first. */
 t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
 {
-  t.check("neither is a free-text input or a datalist any more",
-    /<select id="stage"/.test(html) && /<select id="business"/.test(html) &&
+  /* Business Stage is a <select>; Beneficiary Type is now a chip field, the same
+     control as Industry / Sector, because a scheme usually lists several
+     beneficiary types and a founder can be more than one of them. */
+  t.check("no free-text input and no datalist remains for either field",
+    /<select id="stage"/.test(html) &&
     !/<input id="stage"/.test(html) && !/<input id="business"/.test(html) &&
     !/<datalist/.test(html) && !/list="(stage|business)List"/.test(html));
+  t.check("stage stays a single-value select, because a startup is at one stage",
+    !/id="stageChips"/.test(html) && !/stagePickerBtn/.test(html));
   /* A <select> with no placeholder starts on the first real value, so the form
      would submit an answer the user never gave. State / UT has one; so must these. */
-  t.check("each starts on a labelled empty option, so nothing is pre-filled",
-    /<select id="stage"><option value="">Select business stage<\/option>/.test(html) &&
-    /<select id="business"><option value="">Select beneficiary type<\/option>/.test(html));
-  t.check("both are populated from the dataset by the same helper the filters use",
-    /fillSelect\("stage", stageEntries/.test(js) && /fillSelect\("business", beneficiaryEntries/.test(js));
+  t.check("stage starts on a labelled empty option, so nothing is pre-filled",
+    /<select id="stage"><option value="">Select business stage<\/option>/.test(html));
+  t.check("the beneficiary picker starts on a labelled placeholder too",
+    /id="beneficiaryPickerLabel">Select beneficiary types…/.test(html));
+  t.check("stage is populated from the dataset by the filter helper",
+    /fillSelect\("stage", stageEntries/.test(js));
+  t.check("beneficiary chips are built from the dataset",
+    /chipHtml\(beneficiaryEntries, "beneficiary", "toggleEligBeneficiary"\)/.test(js));
+  /* Two calls, one definition: a second hand-written chip builder for
+     beneficiary would be a third call site with its own markup. */
+  t.check("both chip lists come from ONE builder, so their markup cannot drift",
+    /const chipHtml = \(entries, field, fn\) =>/.test(js) &&
+    (js.match(/= chipHtml\(/g) || []).length === 2,
+    (js.match(/= chipHtml\(/g) || []).length + " call sites");
   t.check("nothing is hidden behind a toggle \u2014 the full list is in the control",
     !/stageToggle|stageList|businessList/.test(js) && !/id="stageList"/.test(html));
   /* Every option states how many schemes reach it: beneficiary has 76
@@ -401,6 +428,15 @@ t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT"
     /o\.textContent=`\$\{v\} \(\$\{c\}\)`/.test(code(js)));
   t.check("the .value stays the bare dataset string, which is what the matcher compares",
     /o\.value=v;/.test(code(js)));
+  /* Multi-select changes the scoring contract: the profile now carries an array,
+     and a scheme listing several of your types is credited for each. */
+  t.check("the profile carries a beneficiary array, not one string",
+    /beneficiaries: beneficiaries/.test(js) && !/businessValue:/.test(code(js)));
+  t.check("scoring credits a scheme for each of your types it lists, capped so one axis cannot dominate",
+    /const specific=p\.beneficiaries\.filter\(b=>s\.target_beneficiaries\.includes\(b\)\)/.test(js) &&
+    /score\+=20\+Math\.min\(6,\(specific\.length-1\)\*3\)/.test(js));
+  t.check("and the reason names only the types that actually matched",
+    /specific\.map\(esc\)\.join\(", "\)/.test(js));
   /* Regression: esc() was applied to a textContent assignment, so the entities
      were shown to the user — the stage option read "R&amp;D (3)". esc() is for
      building HTML strings; a text node is already inert. */
@@ -408,8 +444,13 @@ t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT"
     !/o\.textContent=`\$\{esc\(/.test(code(js)));
   /* The fuzzy resolver is still underneath, and still used. It is what a
      restored value or a saved profile goes through. */
-  t.check("the fuzzy resolver stays wired in, so a restored value still resolves",
-    /resolveAgainst\(stageRaw, ALL_STAGES\)/.test(js) && /resolveAgainst\(bizRaw, ALL_BENEFICIARIES\)/.test(js));
+  /* resolveAgainst() now only serves the stage. The beneficiary path never needed
+     a resolver — a select could only hold a dataset value, and a chip cannot hold
+     anything else — so the call was dead weight. */
+  t.check("the fuzzy resolver is still wired in for the stage, which can be restored",
+    /resolveAgainst\(stageRaw, ALL_STAGES\)/.test(js));
+  t.check("and is not called for beneficiary, which cannot hold a value needing one",
+    !/resolveAgainst\(biz/.test(js) && !/bizRes/.test(code(js)));
   /* Dead code left behind by the free-text version. */
   /* Against code(js), not js: the names survive in the comments explaining
      why the functions went away, and a check written to catch a live function
