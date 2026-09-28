@@ -29,13 +29,14 @@ header{position:sticky;top:0;z-index:50;
   box-shadow:0 2px 16px rgba(9,38,74,.22)}
 .nav{min-height:76px;display:flex;align-items:center;gap:22px}
 .branding{display:flex;align-items:center;gap:12px;min-width:max-content}
-/* Both supplied logos are square WebP with no alpha channel, so whatever
-   background they carry shows as a hard-edged square — the radius is what keeps
-   that from reading as a stray box, and it is the only framing they get. The
-   faint gold ring that used to sit on .logo was removed on request, so the logo
-   stands on the bar on its own. One rule, so the navbar (on both pages) and the
-   footer brand all lose the ring together. */
-.logo{height:48px;width:auto;object-fit:contain;border-radius:12px}
+/* Both supplied logos are square WebP with no alpha channel. The navbar one is
+   cropped to a full circle so it matches the hero mark, which slices the
+   artwork's corners — the same trade the hero disc makes, and the reason it has
+   to be a square box for 50% to come out circular (it is: height drives width
+   off a 1:1 intrinsic ratio). Still no ring: the logo stands on the bar on its
+   own. One rule, so the navbar (on both pages) and the footer brand all become
+   circular together. */
+.logo{height:48px;width:auto;object-fit:contain;border-radius:50%}
 .divider{height:34px;width:1px;background:rgba(255,255,255,.22)}
 /* Two-line lockup: the site name over its Devanagari name, in the logo's gold. */
 .brandname b{display:block;font-weight:900;color:#fff;font-size:1.16rem;letter-spacing:-.02em;line-height:1.15}

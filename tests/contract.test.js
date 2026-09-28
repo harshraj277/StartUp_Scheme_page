@@ -885,10 +885,10 @@ t.step("the institution credit and the real logo files");
     [...html.matchAll(/<img class="(?:logo|institution-logo)"[^>]*>/g)]
       .every(m => /alt=""[^>]*aria-hidden="true"/.test(m[0])));
   /* Opaque squares: without a radius they read as stray boxes on the navy bar or
-     the navy footer. The ring that used to go with it was removed on request, so
-     the radius is now the only framing either logo gets. */
-  t.check("the square logo art is rounded so it reads as a plate, not a stray box",
-    /\.logo\{[^}]*border-radius:/.test(css) && /\.institution-logo\{[^}]*border-radius:/.test(css));
+     the navy footer. The ring that used to go with it was removed on request, and
+     the radius is now a full circle, so the navbar logo matches the hero mark. */
+  t.check("the square logo art is a circle, not a rounded square",
+    /\.logo\{[^}]*border-radius:50%/.test(css) && /\.institution-logo\{[^}]*border-radius:/.test(css));
   t.check("and neither logo carries a border or a ring of its own",
     !/\.logo\{[^}]*border:/.test(css) && !/\.logo\{[^}]*box-shadow/.test(css) &&
     !/\.institution-logo\{[^}]*border:/.test(css) && !/\.institution-logo\{[^}]*box-shadow/.test(css));
