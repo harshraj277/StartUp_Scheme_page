@@ -74,6 +74,23 @@ that bit are pinned down by contract tests:
 - The results grid is 5-up at ≥1800px, 4-up at 1440–1799px, 3-up at
   1081–1439px, 2-up at 761–1080px, 1-up below. Four columns across a 27" screen
   left ~600px cards, so the extra width buys a fifth column instead.
+- Business Stage and Business / Beneficiary Type are plain `<select>` elements,
+  like State / UT and the advanced filters. They were `<input list>` + `<datalist>`,
+  which is why they looked like text boxes: a browser only opens a datalist popup
+  once you have typed a character and draws no arrow to invite you. All of it is
+  in the control, so there is nothing to expand first.
+  - Each option carries its scheme count — `Early Stage (45)`, `Pilot (1)`. There
+    are 76 beneficiary values across 59 schemes and many are near-duplicates, so
+    without a count a label reaching one scheme looks identical to "Startups (16)".
+  - The option `.value` is the bare dataset string; the count is only in the
+    label. The matcher compares `.value`, so escaping it into the label while
+    keeping the value raw is deliberate.
+  - Each starts on a labelled empty option, so the form cannot submit an answer
+    the user never gave.
+  - A `<select>` cannot hold a value outside the dataset, so the "not a dataset
+    value" hint under each field went with the free-text inputs, as did the two
+    empty-result tips about it. `resolveAgainst()` stays wired in underneath and
+    still does fuzzy resolution — that is the path a restored value takes.
 - The compare table caps columns at `max-width:360px` with `overflow-wrap`. The
   cell text is deliberately untruncated, so without a cap one long eligibility
   paragraph stretches its column to several thousand pixels and pushes the other

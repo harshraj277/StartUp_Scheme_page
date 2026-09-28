@@ -373,6 +373,62 @@ t.check("the back link on the compare page sits at the far end of the header",
 t.check("the css braces still balance",
   (css.match(/{/g) || []).length === (css.match(/}/g) || []).length);
 
+/* ---------- Business Stage and Beneficiary Type ----------
+   They were <input list="..."> + <datalist>, which is why the user saw no drop:
+   a browser only opens a datalist popup once you have typed a character, and
+   draws no arrow inviting you to. They are plain <select> elements now, like
+   State / UT and the advanced filters, so the browser draws the dropdown and
+   the whole list is one click away with nothing to expand first. */
+t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
+{
+  t.check("neither is a free-text input or a datalist any more",
+    /<select id="stage"/.test(html) && /<select id="business"/.test(html) &&
+    !/<input id="stage"/.test(html) && !/<input id="business"/.test(html) &&
+    !/<datalist/.test(html) && !/list="(stage|business)List"/.test(html));
+  /* A <select> with no placeholder starts on the first real value, so the form
+     would submit an answer the user never gave. State / UT has one; so must these. */
+  t.check("each starts on a labelled empty option, so nothing is pre-filled",
+    /<select id="stage"><option value="">Select business stage<\/option>/.test(html) &&
+    /<select id="business"><option value="">Select beneficiary type<\/option>/.test(html));
+  t.check("both are populated from the dataset by the same helper the filters use",
+    /fillSelect\("stage", stageEntries/.test(js) && /fillSelect\("business", beneficiaryEntries/.test(js));
+  t.check("nothing is hidden behind a toggle \u2014 the full list is in the control",
+    !/stageToggle|stageList|businessList/.test(js) && !/id="stageList"/.test(html));
+  /* Every option states how many schemes reach it: beneficiary has 76
+     near-duplicate values across 59 schemes, and without a count a label that
+     reaches one scheme looks identical to one that reaches sixteen. */
+  t.check("each option carries its scheme count in the label",
+    /o\.textContent=`\$\{v\} \(\$\{c\}\)`/.test(code(js)));
+  t.check("the .value stays the bare dataset string, which is what the matcher compares",
+    /o\.value=v;/.test(code(js)));
+  /* Regression: esc() was applied to a textContent assignment, so the entities
+     were shown to the user — the stage option read "R&amp;D (3)". esc() is for
+     building HTML strings; a text node is already inert. */
+  t.check("option text is not escaped a second time",
+    !/o\.textContent=`\$\{esc\(/.test(code(js)));
+  /* The fuzzy resolver is still underneath, and still used. It is what a
+     restored value or a saved profile goes through. */
+  t.check("the fuzzy resolver stays wired in, so a restored value still resolves",
+    /resolveAgainst\(stageRaw, ALL_STAGES\)/.test(js) && /resolveAgainst\(bizRaw, ALL_BENEFICIARIES\)/.test(js));
+  /* Dead code left behind by the free-text version. */
+  /* Against code(js), not js: the names survive in the comments explaining
+     why the functions went away, and a check written to catch a live function
+     must not trip over the note describing its removal. */
+  t.check("removed: setFieldHint / updateFieldHints \u2014 a select cannot hold a bad value",
+    !/setFieldHint|updateFieldHints/.test(code(js)));
+  t.check("removed: the hint elements themselves", !/stageHint|businessHint/.test(html) && !/stageHint|businessHint/.test(js));
+  t.check("removed: the empty-result tips about non-dataset values, which cannot fire",
+    !/is not a dataset stage/.test(code(js)) && !/is not a dataset beneficiary/.test(code(js)));
+  t.check("removed: every trace of the hand-drawn dropdown",
+    !/combo/i.test(html) && !/combo/i.test(css) && !/combo/i.test(code(js)));
+  t.check("removed: the document click handler that only existed to close it",
+    !/closest\("\.combo"\)/.test(code(js)));
+  t.check("removed: resetForm no longer closes a panel that cannot exist",
+    !/function resetForm\(\)\{[\s\S]*?closeComboPanel/.test(code(js)));
+  t.check("the select styling already in place covers these two fields",
+    /\.field input,\.field select\{/.test(css) && /\.field input:focus,\.field select:focus\{/.test(css));
+}
+
 t.step("the header is navy with a gold rule, and nothing on it is invisible");
 /* Each of these was a real collision when the bar went navy. A contrast bug is
    invisible to every other suite, so they are pinned here. */

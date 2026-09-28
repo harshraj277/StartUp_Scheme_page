@@ -36,8 +36,12 @@ function makeEl(tag, chipCache, store, rowCache) {
   };
   const el = {
     tagName: (tag || "div").toUpperCase(),
-    _id: "", value: "", textContent: "", hidden: false, selectedIndex: 0,
-    style: {}, dataset: {}, attrs: {}, children: [],
+    _id: "", value: "", textContent: "", hidden: false,
+    style: {}, dataset: {}, attrs: {}, children: [], selected: false,
+    /* fillSelect() and fillDatalist() used to build options; the two match-form
+       fields are <select> now, so option count is a real assertion. Recorded so
+       a test can read back the labels the page would render. */
+    _labels: [],
     classList: {
       _s: new Set(),
       add(...c) { c.forEach(x => this._s.add(x)); },
@@ -45,15 +49,36 @@ function makeEl(tag, chipCache, store, rowCache) {
       toggle(c, f) { f === undefined ? (this._s.has(c) ? this._s.delete(c) : this._s.add(c)) : (f ? this._s.add(c) : this._s.delete(c)); },
       contains(c) { return this._s.has(c); },
     },
-    appendChild(c) { this.children.push(c); return c; },
+    appendChild(c) {
+      this.children.push(c);
+      /* A browser keeps exactly one option selected, the first by default. */
+      if (this.tagName === "SELECT" && !this.children.some(x => x.selected)) c.selected = true;
+      return c;
+    },
     addEventListener() {},
     setAttribute(k, v) { this.attrs[k] = v; },
     getAttribute(k) { return this.attrs[k]; },
     removeAttribute(k) { delete this.attrs[k]; },
-    querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache); },
+    querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache, this._id, store); },
     querySelector() { return makeEl("div", chipCache, store, rowCache); },
     focus() {}, scrollIntoView() {},
   };
+  /* resetForm() resets a <select> with selectedIndex = 0, which in a browser
+     also changes .value. Modelling only the assignment would leave .value on the
+     previously chosen option, so a test could not tell a real reset from a
+     no-op — which is exactly how the old #find-inputs bug hid. */
+  let _selIdx = 0;
+  Object.defineProperty(el, "selectedIndex", {
+    get() { return _selIdx; },
+    set(i) {
+      _selIdx = i | 0;
+      if (el.tagName === "SELECT") {
+        el.value = el.children[_selIdx] ? el.children[_selIdx].value : "";
+        el.children.forEach((c, n) => { c.selected = n === _selIdx; });
+      }
+    },
+  });
+
   Object.defineProperty(el, "innerHTML", {
     get() { return _html; },
     set(v) {
@@ -74,21 +99,38 @@ function makeEl(tag, chipCache, store, rowCache) {
   return el;
 }
 
-/* Only the two selector shapes the app actually uses are modelled. Anything
+/* Only the selector shapes the app actually uses are modelled. Anything
    else returns nothing rather than pretending, so a test cannot pass against a
    selector the browser would have handled differently. */
-function runQuery(sel, chipCache, rowCache) {
+function runQuery(sel, chipCache, rowCache, hostId, store) {
   const chips = /#([\w-]+) \.chip$/.exec(sel);
   if (chips) return chipCache.get(chips[1]) || [];
   const rows = /#([\w-]+) tr\.([\w-]+)$/.exec(sel);
   if (rows) return (rowCache.get(rows[1]) || {})[rows[2]] || [];
+  /* resetForm() clears the form with querySelectorAll("#find input") and
+     ("#find select"). Without these it silently cleared nothing, and a test
+     asserting the form was reset would have been testing a no-op. */
+  if (sel === "#find input" || sel === "#find select") {
+    const want = sel.endsWith("input") ? FORM_INPUTS : FORM_SELECTS;
+    return want.map(id => store[id]).filter(Boolean);
+  }
   return [];
 }
 
+/* The controls inside <section class="find">, by tag. resetForm() clears them by
+   selector, so the stub has to know which is which. */
+const FORM_INPUTS = ["startupName", "sectorFilter"];
+const FORM_SELECTS = ["state", "stage", "business", "recognition", "access", "support", "funding"];
+
+/* The same controls, for tag: a test asserting a field is a <select> needs the
+   stub to agree with the markup. sort/fMinistry and friends are selects too. */
+const SELECT_IDS = ["sort", "fMinistry", "fType", "fStatus", "fFinance", "fRepay", ...FORM_SELECTS];
+const INPUT_IDS = ["searchInput", ...FORM_INPUTS];
+
 /* Every id index.html provides. Pre-creating them keeps the stub honest. */
 const PAGE_IDS = ["trustCount","trustMinistries","dashVerified","heroBadge","sectorChips","sectorChipsCount","sectorFilter",
- "stageList","businessList","fMinistry","fType","fStatus","fFinance","fRepay","govLevelNote",
- "fundCoverage","accessCoverage","accessTag","stageHint","businessHint","stage","business","recognition","state","access","support","funding",
+ "fMinistry","fType","fStatus","fFinance","fRepay","govLevelNote",
+ "fundCoverage","accessCoverage","accessTag","stage","business","recognition","state","access","support","funding",
  "startupName","results","resultCount","paginationWrap","prevPageBtn","nextPageBtn","pagingInfo","browseToolbar","filtersPanel","modeBanner","sectorToggleBtn",
  "sectorPanel","sectorPickerBtn","sectorPickerLabel",
  "quickFilterBanner","resultsHeading","searchInput","sort","toast","modalBackdrop","modalContent",
@@ -106,12 +148,36 @@ function makeCtx(ids, chipCache, rowCache) {
     getElementById(id) { return store[id] ?? null; },
     createElement: (t) => makeEl(t, chipCache, store, rowCache),
     querySelector: () => makeEl("div", chipCache, store, rowCache),
-    querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache); },
+    querySelectorAll(sel) { return runQuery(sel, chipCache, rowCache, null, store); },
     addEventListener() {},
     activeElement: { focus() {} },
     body: makeEl("body", chipCache, store, rowCache),
   };
-  ids.forEach(id => { store[id] = Object.assign(makeEl("div", chipCache, store, rowCache), { _id: id }); });
+  /* Created with the tag index.html actually gives them, so a test can assert a
+     field is a <select> rather than a text input. Everything else is a div. */
+  const tags = Object.assign({}, SELECT_IDS.reduce((a, id) => (a[id] = "select", a), {}),
+                             INPUT_IDS.reduce((a, id) => (a[id] = "input", a), {}));
+  ids.forEach(id => {
+    store[id] = Object.assign(makeEl(tags[id] || "div", chipCache, store, rowCache), { _id: id });
+  });
+  /* Seed the <select>s with the options that are written in the markup, so the
+     stub starts where the browser starts. Without this the "Select business
+     stage" placeholder did not exist and resetForm() set selectedIndex=0 to a
+     value that was never there. An <option> with no value attribute takes its
+     text as its value, which is what State / UT and the funding range rely on. */
+  for (const m of fs.readFileSync(path.join(ROOT, "index.html"), "utf8")
+    .matchAll(/<select id="([\w-]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+    const el = store[m[1]];
+    if (!el) continue;
+    for (const o of m[2].matchAll(/<option([^>]*)>([\s\S]*?)<\/option>/g)) {
+      const text = o[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&");
+      const opt = makeEl("option", chipCache, store, rowCache);
+      opt.value = /value="([^"]*)"/.test(o[1]) ? /value="([^"]*)"/.exec(o[1])[1] : text;
+      opt.textContent = text;
+      el.appendChild(opt);
+    }
+    el.selectedIndex = 0;
+  }
 
   const localStorage = { _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = v; } };
   const location = { hash: "", pathname: "/index.html", search: "", origin: "http://localhost:8080" };

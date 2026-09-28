@@ -182,17 +182,20 @@ function fillSelect(id, entries, {sortAlpha=false}={}){
   if(!el) return;
   let arr=entries.slice();
   if(sortAlpha) arr.sort((a,b)=>a[0].localeCompare(b[0]));
+  /* textContent is a text node, so it needs no escaping — esc() belongs on the
+     paths that build an HTML string, and applying it here displayed the entities
+     themselves: the stage option read "R&amp;D (3)" instead of "R&D (3)". A
+     value containing "<" or "&" can only ever be text this way, never markup. */
   arr.forEach(([v,c])=>{
-    const o=document.createElement("option"); o.value=v; o.textContent=`${v} (${c})`; el.appendChild(o);
+    const o=document.createElement("option");
+    o.value=v; o.textContent=`${v} (${c})`;
+    el.appendChild(o);
   });
 }
-function fillDatalist(id, entries, {sortAlpha=false}={}){
-  const el=document.getElementById(id);
-  if(!el) return;
-  let arr=entries.slice();
-  if(sortAlpha) arr.sort((a,b)=>a[0].localeCompare(b[0]));
-  el.innerHTML = arr.map(([v])=>`<option value="${esc(v)}"></option>`).join("");
-}
+/* Business Stage and Beneficiary Type are plain <select> elements, like State /
+   UT and the advanced filters. They were free-text inputs with a <datalist>,
+   which is why they looked like text boxes: browsers only open a datalist
+   popup once you have typed a character, and draw no arrow to invite you. */
 /* Advanced filters keep only the facets the match form cannot express.
    Sector, stage, beneficiary and support type were removed from here because the
    match form already owns them, and the search box narrows by all four
@@ -213,8 +216,11 @@ function initControls(){
   ALL_SECTORS = sectorEntries.map(e=>e[0]);
   ALL_BENEFICIARIES = beneficiaryEntries.map(e=>e[0]);
 
-  fillDatalist("stageList", stageEntries);
-  fillDatalist("businessList", beneficiaryEntries, {sortAlpha:true});
+  /* Alphabetical, like the advanced filters, and each option carries how many
+     schemes reach it. Beneficiary has 76 near-duplicate values across 59
+     schemes, so "Pilot (1)" has to be visibly different from "Startups (16)". */
+  fillSelect("stage", stageEntries, {sortAlpha:true});
+  fillSelect("business", beneficiaryEntries, {sortAlpha:true});
   fillSelect("fMinistry", ministryEntries, {sortAlpha:true});
   fillSelect("fType", typeEntries, {sortAlpha:true});
 
@@ -434,23 +440,10 @@ function applyQuickFilter(key){
 }
 /* Filter the (now complete) sector chip list so 83 sectors stay usable. */
 function filterSectorChips(){ applySectorChips(); }
-/* Live feedback for the two free-text fields so a typo is never a silent dead end. */
-function setFieldHint(elId, raw, candidates, kind){
-  const el=document.getElementById(elId); if(!el) return;
-  raw=String(raw||"").trim();
-  if(!raw){ el.textContent=""; el.hidden=true; return; }
-  const exact=candidates.find(v=>normText(v)===normText(raw));
-  if(exact){ el.textContent=`✓ Matches dataset value: ${exact}`; el.hidden=false; el.className="field-hint ok"; return; }
-  const close=candidates.find(v=>closeEnough(raw,v));
-  if(close){ el.textContent=`≈ Interpreting as “${close}”`; el.hidden=false; el.className="field-hint"; return; }
-  const ranked=candidates.map(v=>({v,d:levenshtein(normText(raw),normText(v))})).sort((a,b)=>a.d-b.d).slice(0,3).map(x=>x.v);
-  el.textContent=`Not a dataset value — closest: ${ranked.join(", ")}. Partial text still matches.`;
-  el.hidden=false; el.className="field-hint warn";
-}
-function updateFieldHints(){
-  setFieldHint("stageHint", document.getElementById("stage").value, ALL_STAGES, "stage");
-  setFieldHint("businessHint", document.getElementById("business").value, ALL_BENEFICIARIES, "beneficiary type");
-}
+/* setFieldHint() and updateFieldHints() used to sit here, warning when a
+   free-text stage or beneficiary value was not in the dataset. Both fields are
+   <select> elements now, so the only value they can hold is a dataset value and
+   the warning has nothing to warn about. They went with the free-text inputs. */
 
 /* ---------- search: token-AND with partial matching (was one literal substring) ---------- */
 const SEARCH_FIELDS = ["scheme_name","short_name","ministry_department","scheme_type","primary_objective"];
@@ -598,7 +591,6 @@ function findSchemes(){
   const access=document.getElementById("access").value;
   const support=document.getElementById("support").value;
   const sectors=[...eligSectors];
-  updateFieldHints();
 
   if(!stageRaw && !bizRaw && !recognition && !access && !support && !sectors.length){
     currentMode="match"; eligProfile=null; emptyHint="";
@@ -638,12 +630,13 @@ function findSchemes(){
 
   const blocked = scored.filter(r=>r.blockers.length).length;
 
-  /* Never dead-end on a typo — say exactly what to try instead. */
+  /* Never dead-end — say exactly what to try instead. */
   emptyHint="";
   if(!scored.length){
     const tips=[];
-    if(stageRaw && !stageRes.value) tips.push(`“${esc(stageRaw)}” is not a dataset stage. Try one of: ${ALL_STAGES.slice(0,8).map(esc).join(", ")}.`);
-    if(bizRaw && !bizRes.value) tips.push(`“${esc(bizRaw)}” is not a dataset beneficiary type. Try one of: ${ALL_BENEFICIARIES.slice(0,6).map(esc).join(", ")}.`);
+    /* Two tips that used to live here — "…is not a dataset stage/beneficiary
+       type" — are gone with the free-text inputs. A <select> cannot hold a value
+       that is not in the dataset, so they could never fire. */
     if(sectors.length) tips.push(`No scheme in the dataset is tagged for <b>${sectors.map(esc).join(", ")}</b>.`);
     emptyHint=tips.length? tips.map(t=>"• "+t).join("<br>")+"<br><br>" : "";
   }
@@ -663,7 +656,6 @@ function resetForm(){
   eligSectors.clear();
   sectorListExpanded=false;
   sectorPanelOpen=false;
-  updateFieldHints();
   applySectorChips();
   syncSectorPanel();
   resetToBrowse();

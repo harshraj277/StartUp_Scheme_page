@@ -191,6 +191,9 @@ h2{font-size:clamp(1.8rem,3vw,2.8rem);letter-spacing:-.035em;line-height:1.1;mar
 /* Same reason as footer p: full width would otherwise give the closing note a
    1800px line. The table above it is meant to use the whole width. */
 .compare-page .ref-note{max-width:900px}
+/* Same as the full-width change: capped, not left to run the width of the
+   viewport now that the container has no max-width. */
+.find-box{position:relative}
 .brandlink{display:flex;align-items:center;gap:12px;text-decoration:none}
 
 .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}

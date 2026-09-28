@@ -15,9 +15,10 @@ return {
   clearSaved, removeSaved, savedSchemes, showSaved, removeFromCompare, compareUrl,
   get saved(){ return saved; },
   get compareList(){ return compareList; },
-  filterSectorChips, updateFieldHints, applyQuickFilter, resetForm,
+  filterSectorChips, applyQuickFilter, resetForm,
   toggleSectorList, applySectorChips, toggleEligSector,
   toggleSectorPanel, closeSectorPanel,
+  resolveAgainst,
   SCHEMES, ALL_SECTORS, ALL_STAGES, ALL_BENEFICIARIES, SUPPORT_BUCKETS, searchScore
 };`;
 const { api, $, cards, chipCache } = makeEnv(EX);
@@ -33,8 +34,10 @@ try {
   t.check(`stat cards rendered (${($("statsGrid").innerHTML.match(/stat-card/g) || []).length})`, ($("statsGrid").innerHTML.match(/stat-card/g) || []).length === 8);
   t.check(`explore tiles rendered (${($("exploreGrid").innerHTML.match(/explore-tile/g) || []).length})`, ($("exploreGrid").innerHTML.match(/explore-tile/g) || []).length > 0);
   t.check(`all ${api.ALL_SECTORS.length} sectors offered as chips (was 14)`, ($("sectorChips").innerHTML.match(/class="chip"/g) || []).length === api.ALL_SECTORS.length);
-  t.check(`beneficiary datalist is complete (${($("businessList").innerHTML.match(/<option/g) || []).length}, was capped at 20)`, ($("businessList").innerHTML.match(/<option/g) || []).length === api.ALL_BENEFICIARIES.length);
-  t.check(`support-type field has ${$("support").children.length} buckets (the only support control now)`, $("support").children.length === api.SUPPORT_BUCKETS.length);
+
+  /* One extra option: the "Any kind of support" placeholder written in the
+     markup, so the field starts unset rather than on a real answer. */
+  t.check(`support-type field has ${$("support").children.length - 1} buckets (the only support control now)`, $("support").children.length === api.SUPPORT_BUCKETS.length + 1);
   t.check(`first page shows ${cards()} cards`, cards() === 9);
   t.check(`paging label: "${$("pagingInfo").textContent}"`, $("pagingInfo").textContent === "Page 1 of 7 · schemes 1–9 of 59");
   t.check("Previous is disabled on the first page", $("prevPageBtn").disabled === true);
@@ -106,18 +109,25 @@ try {
   t.check(`results filtered: ${$("resultCount").textContent}`, /^[1-9]/.test($("resultCount").textContent));
   api.resetToBrowse();
 
-  t.step("Find My Schemes — typos are caught, not swallowed");
+  t.step("Find My Schemes — a typo can no longer be entered, and none is needed");
   clearForm();
-  $("stage").value = "early strt";
-  api.updateFieldHints();
-  t.check(`stage hint: "${$("stageHint").textContent}"`, /Interpreting as/.test($("stageHint").textContent));
-  t.check("hint is visible, not hidden", $("stageHint").hidden === false);
-  $("business").value = "banana corp";
-  api.updateFieldHints();
-  t.check(`business hint names alternatives: "${$("businessHint").textContent}"`, /closest/.test($("businessHint").textContent));
-  $("startupName").value = "FarmBot"; $("recognition").value = "DPIIT";
+  /* These two fields were free text with a hint that caught a mistyped value.
+     They are <select> elements now, so the hint went with them — a dropdown
+     cannot hold a value that is not in the list. resolveAgainst() still does the
+     fuzzy resolution underneath, which is what a restored value or a saved
+     profile goes through, so that path stays tested here. */
+  t.check("a stage value can only be one the dataset contains",
+    $("stage").children.every(c => c.value === "" || api.ALL_STAGES.indexOf(c.value) > -1));
+  t.check("a beneficiary value can only be one the dataset contains",
+    $("business").children.every(c => c.value === "" || api.ALL_BENEFICIARIES.indexOf(c.value) > -1));
+  t.check("fuzzy resolution still works underneath, for a restored value",
+    api.resolveAgainst("early strt", api.ALL_STAGES).value === "Early Stage");
+  t.check("and it still refuses cleanly on text that means nothing",
+    api.resolveAgainst("banana corp", api.ALL_BENEFICIARIES).value === "");
+  $("startupName").value = "FarmBot";
+  $("stage").value = "Early Stage"; $("recognition").value = "DPIIT";
   api.findSchemes();
-  t.check(`typo still returns matches: ${$("resultCount").textContent}`, cards() > 0);
+  t.check(`a chosen stage returns matches: ${$("resultCount").textContent}`, cards() > 0);
   t.check("match mode hides the browse toolbar", $("browseToolbar").style.display === "none");
 
   t.step("Find My Schemes — a full profile");
@@ -209,7 +219,6 @@ try {
   clearForm();
   api.findSchemes();
   t.check("guided empty state shown", /Almost there/.test($("results").innerHTML));
-  t.check("field hints cleared with the fields", $("stageHint").hidden === true && $("businessHint").hidden === true);
   t.check("result count explains the state", /No eligibility inputs selected yet/.test($("resultCount").textContent));
 
   t.step("Pagination — pages replace each other, they do not accumulate");
@@ -497,6 +506,65 @@ try {
   t.check(`reset returns to the collapsed default (${visible().length} shown)`, visible().length === chips().filter(c => +c.dataset.count >= 2).length);
   t.check("reset clears the sector filter box", $("sectorFilter").value === "");
   t.check("reset clears the selection", api.eligSectors.size === 0);
+} catch (e) {
+  t.bad("threw: " + e.stack.split("\n").slice(0, 3).join(" | "));
+}
+
+try {
+  t.step("Business Stage and Beneficiary Type are real dropdowns, like State / UT");
+  const opts = (id) => $("" + id).children;
+
+  t.check("both are <select> elements, so the browser draws its own dropdown",
+    $("stage").tagName === "SELECT" && $("business").tagName === "SELECT",
+    $("stage").tagName + "/" + $("business").tagName);
+  t.check(`the stage dropdown offers all ${api.ALL_STAGES.length} dataset stages`,
+    opts("stage").length === api.ALL_STAGES.length + 1, opts("stage").length);
+  t.check(`the beneficiary dropdown offers all ${api.ALL_BENEFICIARIES.length} dataset values`,
+    opts("business").length === api.ALL_BENEFICIARIES.length + 1, opts("business").length);
+  t.check("each starts on a labelled empty option, like State / UT's",
+    $("stage").children[0].value === "" && /Select business stage/.test($("stage").children[0].textContent) &&
+    $("business").children[0].value === "" && /Select beneficiary type/.test($("business").children[0].textContent));
+  t.check("the empty option is the one selected on load, so nothing is pre-filled",
+    $("stage").children[0].selected === true && $("business").children[0].selected === true);
+  /* "Expand" was the ask: the whole list must already be in the control, not
+     hidden behind a "show more" toggle the way the sector chips are. */
+  t.check("the full list is already there \u2014 nothing to expand first",
+    !/Show all/.test($("stage").innerHTML) && !/Show all/.test($("business").innerHTML));
+  const stageLabels = opts("stage").map(c => c.textContent);
+  const bizLabels = opts("business").map(c => c.textContent);
+  t.check("every option states how many schemes reach it, so one-off labels are visible",
+    stageLabels.includes("Idea (33)") && bizLabels.includes("Startups (16)"),
+    stageLabels.slice(0, 3).join(" | "));
+  t.check("options are alphabetical, so the list can be scanned",
+    stageLabels.indexOf("Commercialisation (2)") > -1 &&
+      stageLabels.indexOf("Commercialisation (2)") < stageLabels.indexOf("Growth (40)"),
+    stageLabels.join(" | "));
+  t.check("a rare stage reads as rare rather than equal to a common one",
+    stageLabels.includes("Pilot (1)") && stageLabels.includes("Early Stage (45)"));
+  /* textContent is a text node. esc() belongs on the paths that build an
+     HTML string; applied here it displayed the entities themselves, so this
+     option read "R&amp;D (3)" instead of "R&D (3)". */
+  t.check("an ampersand value is shown literally, not as an escaped entity",
+    stageLabels.includes("R&D (3)") &&
+      !stageLabels.some(l => l.indexOf("&amp;") > -1 || l.indexOf("&#39;") > -1),
+    stageLabels.filter(l => l.indexOf("D (3)") > -1).join(" | "));
+
+  const ideaOpt = $("stage").children.find(c => c.value === "Idea");
+  t.check("option .value is the bare dataset value, the count is only in the label",
+    !!ideaOpt && ideaOpt.value === "Idea" && ideaOpt.textContent === "Idea (33)");
+  $("stage").value = "Early Stage";
+  t.check("selecting a stage stores the exact dataset string the matcher compares",
+    $("stage").value === "Early Stage");
+  $("business").value = "DPIIT-recognised startups";
+  t.check("the hyphenated value round-trips intact",
+    $("business").value === "DPIIT-recognised startups");
+
+  /* resetForm() clears by selector, and these are selects now, not inputs. */
+  $("stage").selectedIndex = 3;
+  api.resetForm();
+  t.check("resetForm puts the dropdowns back to the empty option",
+    $("stage").value === "" && $("business").value === "",
+    JSON.stringify($("stage").value) + "/" + JSON.stringify($("business").value));
 } catch (e) {
   t.bad("threw: " + e.stack.split("\n").slice(0, 3).join(" | "));
 }
